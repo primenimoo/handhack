@@ -94,9 +94,10 @@ enum CaptureLoader {
         return load(data: Array(data), name: url.lastPathComponent)
     }
 
-    /// Decides the format from the bytes. The two text formats are told apart by whether the
-    /// first record carries a network name of its own, and `.hccap` is recognised by its shape
-    /// because the format has no magic number.
+    /// Decides the format from the bytes. The two text formats are told apart by whether a full
+    /// nine-field `.hc22000` record is present anywhere; a bare `WPA*01`/`WPA*02` marker glued to
+    /// one hex blob (the legacy export, whose SSID may sit on the line above) is the old format.
+    /// `.hccap` is recognised by its shape because the format has no magic number.
     static func detect(probe: [UInt8], fileName: String = "") -> CaptureFormat {
         if probe.isEmpty { return .hc22000 }
 
@@ -106,17 +107,18 @@ enum CaptureLoader {
         if HccapxReader.sniff(probe) { return .hccapx }
         if HccapReader.sniff(probe) { return .hccap }
 
-        if let firstRecord = firstMeaningfulLine(probe) {
-            if Hc22000Parser.looksLikeRecord(firstRecord) &&
-                firstRecord.filter({ $0 == "*" }).count >= Hc22000Parser.plainFields - 1 {
+        var sawLegacyMarker = false
+        for line in meaningfulLines(probe) {
+            if Hc22000Parser.looksLikeRecord(line) &&
+                line.filter({ $0 == "*" }).count >= Hc22000Parser.plainFields - 1 {
                 return .hc22000
             }
-            if firstRecord.contains(LegacyExportParser.marker) ||
-                firstRecord.contains(LegacyExportParser.markerWpa02) {
-                return .legacyExport
+            if line.contains(LegacyExportParser.marker) ||
+                line.contains(LegacyExportParser.markerWpa02) {
+                sawLegacyMarker = true
             }
         }
-        return .hc22000
+        return sawLegacyMarker ? .legacyExport : .hc22000
     }
 
     private static func loadText(data: [UInt8]) -> Loaded {
@@ -178,15 +180,16 @@ enum CaptureLoader {
         return Loaded(targets: summary.targets, format: format, notes: notes)
     }
 
-    /// First line that is not blank and not a comment, decoded as UTF-8.
-    private static func firstMeaningfulLine(_ probe: [UInt8]) -> String? {
+    /// The lines that matter for format detection: not blank, not a comment, decoded as UTF-8.
+    private static func meaningfulLines(_ probe: [UInt8]) -> [String] {
         let text = String(decoding: probe, as: UTF8.self)
+        var lines: [String] = []
         for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false) {
             var line = String(rawLine).trimmingCharacters(in: .whitespacesAndNewlines)
             if line.hasPrefix("\u{FEFF}") { line.removeFirst() }
             if line.isEmpty || line.hasPrefix("#") || line.hasPrefix("//") { continue }
-            return line
+            lines.append(line)
         }
-        return nil
+        return lines
     }
 }
