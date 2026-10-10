@@ -5,8 +5,8 @@ import Foundation
 /// keyver u8, keymic 16, mac_ap 6, nonce_ap 32, mac_sta 6, nonce_sta 32, eapol_len u16, eapol 256.
 enum HccapxReader {
     static let recordLength = 393
-    private static let signature = 0x58504348L
-    private static let version = 4L
+    private static let signature: UInt32 = 0x58504348
+    private static let version: UInt32 = 4
 
     static func sniff(_ head: [UInt8]) -> Bool {
         guard head.count >= 8 else { return false }
