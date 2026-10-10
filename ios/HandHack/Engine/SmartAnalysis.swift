@@ -52,7 +52,7 @@ enum SmartAnalysis {
         }
 
         let nominalRate = nominalPerSecond(recommended)
-        let estimated = nominalRate > 0 ? Int(ceil(Double(derivations) / nominalRate)) : 0
+        let estimated = nominalRate > 0 ? Int(ceil(Double(derivations) / Double(nominalRate))) : 0
 
         var summary: [String] = []
         summary.append("Сетей в файле: \(targets.count) · уникальных: \(ssids.count)")

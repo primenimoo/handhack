@@ -16,7 +16,7 @@ struct RootView: View {
         }
         .tint(app.settings.accentColor.color)
         .onAppear { AppTheme.current = app.settings.accentColor.color }
-        .onChange(of: app.settings.accentColor) { preset in
+        .onChange(of: app.settings.accentColor) { _, preset in
             AppTheme.current = preset.color
         }
         .fullScreenCover(isPresented: Binding(
