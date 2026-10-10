@@ -16,7 +16,7 @@ final class SuccessSound {
     private init() {}
 
     func play() {
-        let accepted = AudioServicesPlaySystemSound(Self.tickSoundId) == kAudioServicesNoError
+        let accepted = AudioServicesPlaySystemSoundWithCompletion(Self.tickSoundId, nil) == kAudioServicesNoError
         guard !accepted else { return }
         // Rare failure path (an oddly configured device): play an in-memory replica so the
         // "готово" confirmation is never silent.
