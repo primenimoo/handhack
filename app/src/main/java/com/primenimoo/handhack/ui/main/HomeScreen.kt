@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.primenimoo.handhack.R
 import com.primenimoo.handhack.core.FileAccess
+import com.primenimoo.handhack.core.SuccessSound
 import com.primenimoo.handhack.engine.AnalysisStatus
 import com.primenimoo.handhack.ui.components.AnalysisProgressBar
 import com.primenimoo.handhack.ui.components.HandHackCard
@@ -72,6 +73,7 @@ import com.primenimoo.handhack.ui.components.rememberHaptics
 import com.primenimoo.handhack.ui.theme.HandHackSpacing
 import com.primenimoo.handhack.ui.theme.HandHackTypography
 import com.primenimoo.handhack.ui.theme.LocalAnimationsEnabled
+import com.primenimoo.handhack.ui.theme.LocalSoundEnabled
 import kotlin.math.roundToInt
 
 @Composable
@@ -85,6 +87,7 @@ fun HomeScreen(
     val snackbarHost = remember { SnackbarHostState() }
     val context = androidx.compose.ui.platform.LocalContext.current
     val haptics = rememberHaptics()
+    val soundEnabled = LocalSoundEnabled.current
     val animations = LocalAnimationsEnabled.current
 
     val picker = rememberLauncherForActivityResult(
@@ -99,7 +102,12 @@ fun HomeScreen(
     }
 
     LaunchedEffect(state.status) {
-        if (state.status == AnalysisStatus.COMPLETED) haptics(true)
+        if (state.status == AnalysisStatus.COMPLETED) {
+            haptics(true)
+            if (soundEnabled && !state.result?.recoveredPasswords.isNullOrEmpty()) {
+                SuccessSound.play(context)
+            }
+        }
     }
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -170,7 +178,7 @@ private fun ImportStep(
             .padding(horizontal = HandHackSpacing.lg),
         verticalArrangement = Arrangement.spacedBy(HandHackSpacing.md),
     ) {
-        Spacer(Modifier.height(96.dp))
+        Spacer(Modifier.height(24.dp))
 
         HandHackCard {
             Column(horizontalAlignment = Alignment.Start) {
@@ -256,7 +264,7 @@ private fun ProgressStep(
             .padding(horizontal = HandHackSpacing.lg),
         verticalArrangement = Arrangement.spacedBy(HandHackSpacing.md),
     ) {
-        Spacer(Modifier.height(96.dp))
+        Spacer(Modifier.height(24.dp))
 
         HandHackCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -410,7 +418,7 @@ private fun ResultStep(
             .padding(horizontal = HandHackSpacing.lg),
         verticalArrangement = Arrangement.spacedBy(HandHackSpacing.md),
     ) {
-        Spacer(Modifier.height(96.dp))
+        Spacer(Modifier.height(24.dp))
 
         HandHackCard {
             Row(verticalAlignment = Alignment.CenterVertically) {

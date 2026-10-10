@@ -112,6 +112,7 @@ class MainActivity : ComponentActivity() {
                 useDynamicColor = current.dynamicColor,
                 animationsEnabled = current.animationsEnabled,
                 hapticsEnabled = current.hapticsEnabled,
+                soundEnabled = current.soundEnabled,
             ) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),

@@ -43,6 +43,7 @@ class SettingsViewModel(
     fun setDynamicColor(enabled: Boolean) = viewModelScope.launch { repository.setDynamicColor(enabled) }
     fun setAnimations(enabled: Boolean) = viewModelScope.launch { repository.setAnimations(enabled) }
     fun setHaptics(enabled: Boolean) = viewModelScope.launch { repository.setHaptics(enabled) }
+    fun setSoundEnabled(enabled: Boolean) = viewModelScope.launch { repository.setSoundEnabled(enabled) }
     fun setPerformance(mode: PerformanceMode) = viewModelScope.launch { repository.setPerformanceMode(mode) }
     fun setWorkerMode(mode: WorkerCountMode) = viewModelScope.launch { repository.setWorkerCountMode(mode) }
     fun setWorkerCount(count: Int) = viewModelScope.launch { repository.setManualWorkerCount(count) }

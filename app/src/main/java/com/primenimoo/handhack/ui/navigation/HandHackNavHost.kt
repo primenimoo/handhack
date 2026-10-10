@@ -6,7 +6,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -29,6 +31,7 @@ import com.primenimoo.handhack.HandHackApplication
 import com.primenimoo.handhack.data.settings.HandHackSettings
 import com.primenimoo.handhack.ui.about.AboutScreen
 import com.primenimoo.handhack.ui.components.CapsuleNavigationBar
+import com.primenimoo.handhack.ui.components.BrandHeader
 import com.primenimoo.handhack.ui.components.MainTab
 import com.primenimoo.handhack.ui.dictionary.DictionaryScreen
 import com.primenimoo.handhack.ui.dictionary.DictionaryViewModel
@@ -93,8 +96,10 @@ fun HandHackNavHost(
     val startDestination = if (settings.onboardingCompleted) Routes.HOME else Routes.ONBOARDING
 
     Surface(modifier = modifier.fillMaxSize()) {
-        Box(Modifier.fillMaxSize()) {
-            NavHost(
+        Column(Modifier.fillMaxSize()) {
+            BrandHeader()
+            Box(Modifier.fillMaxWidth().weight(1f)) {
+                NavHost(
                 navController = navController,
                 startDestination = startDestination,
                 modifier = Modifier
@@ -191,6 +196,7 @@ if (isTabRoute) {
                         modifier = Modifier.align(Alignment.BottomCenter),
                     )
                 }
+            }
         }
     }
 }

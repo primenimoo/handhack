@@ -24,6 +24,7 @@ object Keys {
     val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
     val ANIMATIONS = booleanPreferencesKey("animations_enabled")
     val HAPTICS = booleanPreferencesKey("haptics_enabled")
+    val SOUND = booleanPreferencesKey("sound_enabled")
     val PERFORMANCE = stringPreferencesKey("performance_mode")
     val WORKER_MODE = stringPreferencesKey("worker_count_mode")
     val WORKER_COUNT = intPreferencesKey("worker_count")
@@ -59,6 +60,7 @@ class SettingsRepository(private val context: Context) {
     suspend fun setDynamicColor(enabled: Boolean) = edit { it[Keys.DYNAMIC_COLOR] = enabled }
     suspend fun setAnimations(enabled: Boolean) = edit { it[Keys.ANIMATIONS] = enabled }
     suspend fun setHaptics(enabled: Boolean) = edit { it[Keys.HAPTICS] = enabled }
+    suspend fun setSoundEnabled(enabled: Boolean) = edit { it[Keys.SOUND] = enabled }
     suspend fun setPerformanceMode(mode: PerformanceMode) = edit { it[Keys.PERFORMANCE] = mode.storageKey }
     suspend fun setWorkerCountMode(mode: WorkerCountMode) = edit { it[Keys.WORKER_MODE] = mode.storageKey }
     suspend fun setManualWorkerCount(count: Int) = edit { it[Keys.WORKER_COUNT] = count.coerceIn(1, 32) }

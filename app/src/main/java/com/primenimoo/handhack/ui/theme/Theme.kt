@@ -23,6 +23,9 @@ val LocalAnimationsEnabled = compositionLocalOf { true }
 /** Global haptics switch, driven by Settings → Haptic feedback. */
 val LocalHapticsEnabled = compositionLocalOf { true }
 
+/** Global success-sound switch, driven by Settings → Sound on success. */
+val LocalSoundEnabled = compositionLocalOf { true }
+
 /** Shared spacing scale so padding/radii stay consistent across screens. */
 object HandHackSpacing {
     val xs = 4.dp
@@ -41,6 +44,7 @@ fun HandHackTheme(
     useDynamicColor: Boolean = false,
     animationsEnabled: Boolean = true,
     hapticsEnabled: Boolean = true,
+    soundEnabled: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     val systemDark = isSystemInDarkTheme()
@@ -87,6 +91,7 @@ fun HandHackTheme(
     CompositionLocalProvider(
         LocalAnimationsEnabled provides animationsEnabled,
         LocalHapticsEnabled provides hapticsEnabled,
+        LocalSoundEnabled provides soundEnabled,
     ) {
         MaterialTheme(
             colorScheme = scheme,

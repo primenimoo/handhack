@@ -130,6 +130,16 @@ fun SettingsScreen(
                 )
             }
 
+            SectionHeader(title = "Подбор")
+            HandHackCard {
+                ToggleRow(
+                    title = "Звук при находке",
+                    subtitle = "Короткий звук, когда пароль найден",
+                    checked = settings.soundEnabled,
+                    onChange = viewModel::setSoundEnabled,
+                )
+            }
+
             SectionHeader(title = "Производительность")
             HandHackCard {
                 PerformanceMode.entries.forEach { mode ->
