@@ -24,10 +24,10 @@ import javax.crypto.spec.SecretKeySpec
  * Checks the key schedule against values this project did not produce, then proves that every
  * supported container can carry a real handshake and be read back.
  *
- * The expected values come from an independent oracle: PBKDF2 from the platform provider, and
- * PRF-512, the PMKID and the MIC built directly on HMAC-SHA1 as IEEE 802.11i defines them. The
- * `password`/`IEEE` pair is the vector published in the standard, so a regression in the
- * derivation cannot be hidden behind a self-consistent test.
+ * PBKDF2 comes from the platform provider and is checked against the vector the standard
+ * publishes; the PRF, the PMKID and the MIC follow the IEEE 802.11i construction hostap and
+ * aircrack-ng implement. The `password`/`IEEE` pair is the vector published in the standard, so a
+ * regression in the derivation cannot be hidden behind a self-consistent test.
  */
 class CaptureFormatTest {
 
@@ -44,7 +44,7 @@ class CaptureFormatTest {
 
     private val pmk = Hex.decode("031cc89c376d8b215ccaff9a24b3849740ba2774bb58d128a7d29722999d7724")!!
     private val pmkid = Hex.decode("34445a8ed3d4a876d2dc0586867c3d2d")!!
-    private val keyConfirmationKey = Hex.decode("53cc8933ef579773792e261c80bda167")!!
+    private val keyConfirmationKey = Hex.decode("c6b80069d7eb00720c147f2be08dab35")!!
 
     // --- the key schedule, against values computed elsewhere --------------------------------
 
@@ -229,6 +229,29 @@ class CaptureFormatTest {
     }
 
     @Test
+    fun `a password is found from a message 1 that carries a pmkid, without message 2`() {
+        val bytes = pcapBytes(listOf(beacon(), dataFrame(messageOneWithPmkid())))
+        val loaded = CaptureLoader.load(write("capture.pcap", bytes))
+
+        assertEquals(1, loaded.targets.size)
+        assertEquals(CaptureEvidence.PMKID, loaded.targets.single().evidence)
+        assertTrue(loaded.targets.single().verify(passphrase))
+        assertFalse(loaded.targets.single().verify("wrongpassword"))
+        assertFalse(loaded.notes.any { it.contains("message 2") || it.contains("имя сети") })
+    }
+
+    @Test
+    fun `messages three and four pair without messages one or two`() {
+        val bytes = pcapBytes(listOf(beacon(), dataFrame(messageThree()), dataFrame(messageFour())))
+        val loaded = CaptureLoader.load(write("capture.pcap", bytes))
+
+        assertEquals(1, loaded.targets.size)
+        assertEquals(CaptureEvidence.EAPOL_MIC, loaded.targets.single().evidence)
+        assertTrue(loaded.targets.single().verify(passphrase))
+        assertFalse(loaded.targets.single().verify("wrongpassword"))
+    }
+
+    @Test
     fun `a capture without message 2 is refused with a reason instead of a wrong answer`() {
         val partial = pcapBytes(listOf(beacon(), dataFrame(messageOne())))
         val loaded = CaptureLoader.load(write("capture.pcap", partial))
@@ -364,6 +387,54 @@ class CaptureFormatTest {
         return withMic
     }
 
+    /**
+     * The access point's message 3: it repeats the authenticator nonce and carries a MIC of its
+     * own, so a capture that missed messages 1 and 2 can still be checked once message 4 arrives.
+     */
+    private fun messageThree(): ByteArray {
+        val kck = Ptk.deriveKeyConfirmationKey(
+            pmk, authenticator, supplicant, authenticatorNonce, supplicantNonce, Prf.KEY_DESCRIPTOR_CCMP,
+        )
+        val withoutMic = eapolKey(
+            keyInfo = keyInfo(keyType = 1, install = true, ack = true, mic = true, secure = true),
+            nonce = authenticatorNonce,
+            replayCounter = 3L,
+        )
+        val mac = Mac.getInstance("HmacSHA1")
+        mac.init(SecretKeySpec(kck, "HmacSHA1"))
+        val mic = mac.doFinal(withoutMic).copyOfRange(0, PmkVerifier.MIC_LENGTH)
+
+        val withMic = withoutMic.copyOf()
+        System.arraycopy(mic, 0, withMic, PmkVerifier.MIC_OFFSET, mic.size)
+        return withMic
+    }
+
+    /**
+     * The supplicant's final acknowledgement: it echoes the supplicant nonce and supplies the
+     * second nonce a message-3 MIC needs. It carries a MIC but no acknowledgement.
+     */
+    private fun messageFour(): ByteArray = eapolKey(
+        keyInfo = keyInfo(keyType = 1, mic = true, secure = true),
+        nonce = supplicantNonce,
+        replayCounter = 4L,
+    )
+
+    /**
+     * A message 1 that carries the PMKID in a key-data element, as an access point answers a probe
+     * that asks for it — the shape a single-message PMKID capture has.
+     */
+    private fun messageOneWithPmkid(): ByteArray {
+        var frame = messageOne()
+        val element = byteArrayOf(0xDD.toByte(), 20, 0x00, 0x0F, 0xAC.toByte(), 0x04) + pmkid
+        frame += element
+        frame[97] = ((element.size shr 8) and 0xFF).toByte()
+        frame[98] = (element.size and 0xFF).toByte()
+        val bodyLength = frame.size - 4
+        frame[2] = ((bodyLength shr 8) and 0xFF).toByte()
+        frame[3] = (bodyLength and 0xFF).toByte()
+        return frame
+    }
+
     private fun keyInfo(
         keyType: Int,
         install: Boolean = false,
@@ -372,13 +443,13 @@ class CaptureFormatTest {
         secure: Boolean = false,
         encrypted: Boolean = false,
     ): Int {
-        var value = 1 // AES: bit 0 of the key information field
-        value = value or (keyType shl 1)
-        if (install) value = value or 0x08
-        if (ack) value = value or 0x10
-        if (mic) value = value or 0x20
-        if (secure) value = value or 0x40
-        if (encrypted) value = value or 0x80
+        var value = 2 // key descriptor version 2: HMAC-SHA1 with AES/CCMP
+        value = value or (keyType shl 2) // key type sits in bits 2..3: 1 pairwise, 2 group
+        if (install) value = value or 0x0040
+        if (ack) value = value or 0x0080
+        if (mic) value = value or 0x0100
+        if (secure) value = value or 0x0200
+        if (encrypted) value = value or 0x1000
         return value
     }
 
@@ -388,8 +459,9 @@ class CaptureFormatTest {
         frame[0] = 0x01 // EAPOL version
         frame[1] = 0x03 // EAPOL-Key
         frame[4] = Prf.KEY_DESCRIPTOR_CCMP.toByte()
-        frame[5] = (keyInfo and 0xFF).toByte()
-        frame[6] = ((keyInfo shr 8) and 0xFF).toByte()
+        // Key information is a big-endian sixteen-bit field, high byte first.
+        frame[5] = ((keyInfo shr 8) and 0xFF).toByte()
+        frame[6] = (keyInfo and 0xFF).toByte()
         // The key length stays zero: a CCMP pairwise key has no fixed length.
         for (i in 0 until 8) frame[9 + i] = ((replayCounter shr ((7 - i) * 8)) and 0xFF).toByte()
         System.arraycopy(nonce, 0, frame, EapolKey.NONCE_OFFSET, nonce.size)

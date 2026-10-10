@@ -1,7 +1,9 @@
 package com.primenimoo.handhack.engine.capture
 
+import com.primenimoo.handhack.engine.handshake.CaptureEvidence
 import com.primenimoo.handhack.engine.handshake.HandshakeTarget
 import com.primenimoo.handhack.engine.handshake.Hex
+import com.primenimoo.handhack.engine.handshake.PmkVerifier
 
 /**
  * Turns raw 802.11 frames into the handshake records the cracker can check.
@@ -120,71 +122,105 @@ object WirelessCaptureParser {
             return emptyList()
         }
 
-        val messageOnes = messages.filter { it.number == EapolKey.MESSAGE_1 }
-            .associateBy { it.key }
-        val messageTwos = messages.filter { it.number == EapolKey.MESSAGE_2 }
+        val targets = mutableListOf<HandshakeTarget>()
+        val claimed = mutableSetOf<String>()
+        var messageOnesWithPmkid = 0
+        var missingSsid = 0
 
-        if (messageTwos.isEmpty()) {
-            val seen = messages.map { it.number }.distinct().sorted()
-            notes += "В capture нет EAPOL-Key message 2 — проверить пароль не по чему. " +
-                "Найдены сообщения: ${seen.joinToString(", ") { "M$it" }}."
-            return emptyList()
+        // The PMKID attack: an access point that is asked hands its PMKID out in message 1, and
+        // that one value is enough to test a passphrase. This makes a capture that never got past
+        // message 1 crackable, the usual output of ESP32 / "Bruce firmware".
+        for (message in messages.filter { it.number == EapolKey.MESSAGE_1 }) {
+            val pmkid = EapolKey.pmkid(message.frame) ?: continue
+            messageOnesWithPmkid++
+            val ssid = ssidByBssid[Hex.encode(message.authenticator)]
+            if (ssid == null) {
+                missingSsid++
+                continue
+            }
+            if (!claimed.add("pmkid:${message.key}")) continue
+            targets += HandshakeTarget(
+                ssidBytes = ssid,
+                verifier = PmkVerifier.PmkId(pmkid, message.authenticator, message.supplicant),
+                rawLine = "PMKID ${Hex.encode(message.authenticator)}",
+                evidence = CaptureEvidence.PMKID,
+                bssid = message.authenticator,
+                station = message.supplicant,
+            )
         }
 
-        val targets = mutableListOf<HandshakeTarget>()
-        var missingMessageOne = 0
-        var missingSsid = 0
-        var missingMic = 0
-
-        for (second in messageTwos) {
-            if (!second.hasMic) {
-                missingMic++
+        // A MIC needs both nonces to be rebuilt into a PTK: the authenticator's (message 1 or 3)
+        // and the supplicant's (message 2 or 4). Whichever message carries the MIC is checked, so
+        // message 3 and message 4 work as well as message 2.
+        var micWithoutNonces = 0
+        val groups = messages.groupBy { it.key }
+        for (group in groups.values) {
+            val authenticatorNonce = group
+                .firstOrNull { (it.number == EapolKey.MESSAGE_1 || it.number == EapolKey.MESSAGE_3) && !isZeroNonce(it.frame) }
+                ?.let { EapolKey.nonce(it.frame) }
+            val supplicantNonce = group
+                .firstOrNull { (it.number == EapolKey.MESSAGE_2 || it.number == EapolKey.MESSAGE_4) && !isZeroNonce(it.frame) }
+                ?.let { EapolKey.nonce(it.frame) }
+            val micMessage = group.firstOrNull {
+                it.hasMic && (it.number == EapolKey.MESSAGE_2 || it.number == EapolKey.MESSAGE_3 || it.number == EapolKey.MESSAGE_4)
+            } ?: continue
+            if (authenticatorNonce == null || supplicantNonce == null) {
+                micWithoutNonces++
                 continue
             }
-            val first = messageOnes[second.key]
-            if (first == null) {
-                missingMessageOne++
+            val ssid = ssidByBssid[Hex.encode(micMessage.authenticator)]
+            if (ssid == null) {
+                missingSsid++
                 continue
             }
-            // Message 1 carries the authenticator's nonce, message 2 the supplicant's: the PTK
-            // is built from the nonce each side generated, so they must not be crossed over.
-            val authenticatorNonce = EapolKey.nonce(first.frame)
-            val supplicantNonce = EapolKey.nonce(second.frame)
-            val descriptorType = EapolKey.keyDescriptorType(second.frame)
-            val ssid = ssidByBssid[Hex.encode(second.authenticator)]
+            if (!claimed.add("mic:${micMessage.key}")) continue
 
-            val target = MicTarget.build(
-                ssid = ssid ?: ByteArray(0),
-                mic = EapolKey.mic(second.frame),
-                authenticator = second.authenticator,
-                supplicant = second.supplicant,
+            val descriptorType = EapolKey.keyDescriptorType(micMessage.frame)
+            MicTarget.build(
+                ssid = ssid,
+                mic = EapolKey.mic(micMessage.frame),
+                authenticator = micMessage.authenticator,
+                supplicant = micMessage.supplicant,
                 authenticatorNonce = authenticatorNonce,
                 supplicantNonce = supplicantNonce,
                 keyDescriptorType = descriptorType,
-                message = second.frame,
-                rawLabel = "EAPOL M2 ${Hex.encode(second.authenticator)}",
-            )
-            if (target != null) {
-                targets += target
-            } else if (ssid == null) {
-                missingSsid++
-            }
+                message = micMessage.frame,
+                rawLabel = "EAPOL M${micMessage.number} ${Hex.encode(micMessage.authenticator)}",
+            )?.let { targets += it }
         }
 
         if (targets.isEmpty()) {
-            if (missingMic > 0) {
-                notes += "EAPOL-Key message 2 найдена без MIC — в capture он обнулён."
-            }
-            if (missingMessageOne > 0) {
-                notes += "Нет EAPOL-Key message 1: без supplicant nonce нельзя построить PTK."
-            }
-            if (missingSsid > 0) {
-                notes += "Не найдено имя сети для BSSID — в capture нет beacon или probe frames " +
-                    "с этим адресом, а имя сети обязательно для PBKDF2."
-            }
+            explain(messages, messageOnesWithPmkid, micWithoutNonces, missingSsid, notes)
         }
         return targets
     }
+
+    private fun explain(
+        messages: List<Message>,
+        messageOnesWithPmkid: Int,
+        micWithoutNonces: Int,
+        missingSsid: Int,
+        notes: MutableList<String>,
+    ) {
+        val present = messages.map { it.number }.distinct().sorted()
+        val hasSupplicantNonce = present.contains(EapolKey.MESSAGE_2) || present.contains(EapolKey.MESSAGE_4)
+
+        if (messageOnesWithPmkid == 0 && !hasSupplicantNonce) {
+            notes += "В capture нет EAPOL-Key message 2 — проверить пароль не по чему. " +
+                "Найдены сообщения: ${present.joinToString(", ") { "M$it" }}. " +
+                "Для атаки по PMKID нужна message 1 с полем PMKID."
+        }
+        if (micWithoutNonces > 0) {
+            notes += "Есть сообщение с MIC, но нет обоих nonce (message 1/3 и 2/4) — " +
+                "без них нельзя построить PTK."
+        }
+        if (missingSsid > 0 && notes.none { it.contains("имя сети") }) {
+            notes += "Не найдено имя сети для BSSID — в capture нет beacon или probe frames " +
+                "с этим адресом, а имя сети обязательно для PBKDF2."
+        }
+    }
+
+    private fun isZeroNonce(frame: ByteArray): Boolean = EapolKey.nonce(frame).all { it.toInt() == 0 }
 
     /**
      * Works out which address is the access point. A beacon or probe frame settles it outright;

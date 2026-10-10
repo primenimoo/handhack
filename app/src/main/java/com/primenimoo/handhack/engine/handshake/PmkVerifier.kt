@@ -7,8 +7,10 @@ import javax.crypto.spec.SecretKeySpec
  * The pseudorandom function of IEEE 802.11i, used to stretch the pairwise master key into
  * the pairwise transient key.
  *
- * `PRF-n(key, label, seed) = HMAC-n(A(1) || seed) || HMAC-n(A(2) || seed) || …` where
- * `A(0) = label` and `A(i) = HMAC-n(A(i-1))`, `n` being the digest size.
+ * `PRF(K, label, seed) = HMAC(K, label || 0x00 || seed || counter)` for `counter = 0, 1, 2, …`,
+ * where the label is followed by a single zero octet and the counter is a single octet appended
+ * after the seed. This is the construction hostap and aircrack-ng implement, and it is what the
+ * MIC of a real handshake depends on.
  */
 object Prf {
 
@@ -35,21 +37,18 @@ object Prf {
         val mac = Mac.getInstance(algorithm)
         mac.init(SecretKeySpec(pmk, algorithm))
 
-        // `block` walks A(0), A(1), A(2)… so each round can emit HMAC(A(i) || seed).
-        var block = label
+        var counter = 0
         var offset = 0
         while (offset < length) {
             mac.reset()
-            mac.update(block)
-            block = mac.doFinal()
-
-            mac.reset()
-            mac.update(block)
+            mac.update(label)
             mac.update(seed)
+            mac.update(counter.toByte())
             val chunk = mac.doFinal()
             val take = minOf(chunk.size, length - offset)
             System.arraycopy(chunk, 0, out, offset, take)
             offset += take
+            counter++
         }
         return out
     }
