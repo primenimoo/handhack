@@ -21,6 +21,46 @@ enum DictionaryStore {
         return documents.appendingPathComponent("Dictionaries")
     }
 
+    /// The ids of the dictionaries the user has ticked for the next run, kept in UserDefaults.
+    /// Until the first tick the set is deliberately empty and every dictionary counts as enabled,
+    /// so a fresh install works without configuration; once the user touches a checkbox their
+    /// choice is remembered verbatim.
+    private static let enabledKey = "enabledDictionaryIDs"
+
+    static var hasExplicitSelection: Bool {
+        UserDefaults.standard.object(forKey: enabledKey) != nil
+    }
+
+    static var enabledIDs: Set<String> {
+        Set(UserDefaults.standard.stringArray(forKey: enabledKey) ?? [])
+    }
+
+    static func setEnabledIDs(_ ids: Set<String>) {
+        UserDefaults.standard.set(Array(ids), forKey: enabledKey)
+    }
+
+    static func isEnabled(_ id: String) -> Bool {
+        hasExplicitSelection ? enabledIDs.contains(id) : true
+    }
+
+    static func setEnabled(_ id: String, _ enabled: Bool) {
+        var ids = hasExplicitSelection ? enabledIDs : Set(all.map { $0.id })
+        if enabled { ids.insert(id) } else { ids.remove(id) }
+        setEnabledIDs(ids)
+    }
+
+    static func setAllEnabled(_ enabled: Bool) {
+        setEnabledIDs(enabled ? Set(all.map { $0.id }) : [])
+    }
+
+    /// The dictionaries to run, in list order: the ticked ones, or all of them when the user has
+    /// never unticked anything.
+    static var enabled: [Dictionary] {
+        guard hasExplicitSelection else { return all }
+        let ids = enabledIDs
+        return all.filter { ids.contains($0.id) }
+    }
+
     static var all: [Dictionary] {
         ensureDirectory()
         let files = (try? FileManager.default.contentsOfDirectory(

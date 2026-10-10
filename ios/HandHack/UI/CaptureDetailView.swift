@@ -42,6 +42,7 @@ struct CaptureDetailView: View {
         }
         .navigationTitle(capture.ssids.first ?? "Запись")
         .navigationBarTitleDisplayMode(.inline)
+        .supportToolbar()
         .onAppear(perform: load)
     }
 
@@ -89,12 +90,12 @@ private struct AttackControl: View {
     let capture: CaptureRecord
     let targets: [HandshakeTarget]
 
-    @AppStorage("selectedDictionaryID") private var selectedDictionaryID = ""
     @State private var dictionaries: [DictionaryStore.Dictionary] = []
+    @State private var enabledIDs: Set<String> = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            dictionaryMenu
+            dictionarySelector
 
             switch runner.phase {
             case .idle:
@@ -107,37 +108,47 @@ private struct AttackControl: View {
             }
         }
         .padding(.vertical, 4)
-        .onAppear { dictionaries = DictionaryStore.all }
+        .onAppear(perform: reloadDictionaries)
     }
 
-    private var selected: DictionaryStore.Dictionary? {
-        dictionaries.first { $0.id == selectedDictionaryID }
+    private var enabledDictionaries: [DictionaryStore.Dictionary] {
+        dictionaries.filter { enabledIDs.contains($0.id) }
     }
 
-    private var dictionaryMenu: some View {
-        Menu {
+    /// The tick list the run will use. Every dictionary is ticked out of the box; the choice is
+    /// remembered across captures, so a user who only trusts their own list does not re-tick it.
+    private var dictionarySelector: some View {
+        DisclosureGroup {
             if dictionaries.isEmpty {
-                Text("Нет словарей")
+                Text("Нет словарей — добавьте их на вкладке «Словари».")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             } else {
                 ForEach(dictionaries) { dictionary in
-                    Button {
-                        selectedDictionaryID = dictionary.id
-                    } label: {
-                        if dictionary.id == selectedDictionaryID {
-                            Label(dictionary.name, systemImage: "checkmark")
-                        } else {
-                            Text(dictionary.name)
+                    Toggle(isOn: Binding(
+                        get: { enabledIDs.contains(dictionary.id) },
+                        set: { setEnabled(dictionary.id, $0) })) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(dictionary.name).font(.subheadline)
+                            Text("\(dictionary.size.formatted()) строк")
+                                .font(.caption2).foregroundStyle(.secondary)
                         }
                     }
                 }
+                HStack {
+                    Button("Выбрать все") { selectAll(true) }
+                    Spacer()
+                    Button("Снять все") { selectAll(false) }
+                }
+                .font(.caption)
             }
         } label: {
             HStack {
                 Image(systemName: "books.vertical")
-                Text(selected?.name ?? "Выбрать словарь")
+                Text(enabledIDs.isEmpty
+                     ? "Выберите словари"
+                     : "Словари: \(enabledIDs.count) из \(dictionaries.count)")
                     .lineLimit(1)
-                Spacer()
-                Image(systemName: "chevron.up.chevron.down").font(.caption)
             }
             .font(.subheadline)
         }
@@ -160,7 +171,7 @@ private struct AttackControl: View {
         }
         .buttonStyle(.borderedProminent)
         .tint(AppTheme.accent)
-        .disabled(runner.isRunning || selected == nil || targets.isEmpty)
+        .disabled(runner.isRunning || enabledDictionaries.isEmpty || targets.isEmpty)
     }
 
     private func runningView(_ progress: AnalysisEngine.Progress) -> some View {
@@ -174,6 +185,10 @@ private struct AttackControl: View {
             }
             .font(.caption)
             .foregroundStyle(.secondary)
+            if let label = runner.currentDictionary, runner.dictionaryTotal > 1 {
+                Text("Словарь \(runner.dictionaryIndex)/\(runner.dictionaryTotal): \(label)")
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
             Text("Слово: \(progress.currentWord)")
                 .font(.caption.monospaced())
                 .lineLimit(1)
@@ -227,37 +242,60 @@ private struct AttackControl: View {
         return min(1, Double(progress.processedLines) / Double(progress.totalLines))
     }
 
+    private func reloadDictionaries() {
+        dictionaries = DictionaryStore.all
+        enabledIDs = Set(DictionaryStore.enabled.map { $0.id })
+    }
+
+    private func setEnabled(_ id: String, _ enabled: Bool) {
+        if enabled { enabledIDs.insert(id) } else { enabledIDs.remove(id) }
+        DictionaryStore.setEnabledIDs(enabledIDs)
+    }
+
+    private func selectAll(_ enabled: Bool) {
+        enabledIDs = enabled ? Set(dictionaries.map { $0.id }) : []
+        DictionaryStore.setEnabledIDs(enabledIDs)
+    }
+
     private func start() {
-        guard let dictionary = selected else { return }
-        guard let bytes = DictionaryStore.contents(id: dictionary.id) else { return }
+        let selected = enabledDictionaries
+        let inputs = selected.compactMap { dictionary -> AttackRunner.DictionaryInput? in
+            guard let bytes = DictionaryStore.contents(id: dictionary.id) else { return nil }
+            return AttackRunner.DictionaryInput(name: dictionary.name, bytes: bytes)
+        }
+        guard !inputs.isEmpty else { return }
+        let names = selected.count == 1
+            ? selected[0].name
+            : "\(selected.count) словар\(selected.count % 10 == 1 && selected.count != 11 ? "ь" : "ей")"
+
         runner.start(
             targets: targets,
-            dictionaryBytes: bytes,
+            dictionaries: inputs,
             notifyOnFinish: app.settings.notifyOnFinish,
             hapticsEnabled: app.settings.hapticsEnabled) { outcome, duration in
-                record(outcome, duration: duration, dictionary: dictionary)
+                record(outcome, duration: duration, dictionaryName: names)
             }
     }
 
     private func record(_ outcome: AnalysisEngine.Outcome,
                         duration: Double,
-                        dictionary: DictionaryStore.Dictionary) {
+                        dictionaryName: String) {
         let result: CrackResult
         switch outcome {
         case .found(let password, let ssid, let attempts):
             result = CrackResult(captureName: capture.fileName, ssid: ssid, password: password,
                                  attempts: attempts, durationSeconds: duration,
-                                 dictionaryName: dictionary.name, found: true)
+                                 dictionaryName: runner.currentDictionary ?? dictionaryName, found: true)
         case .notFound(let attempts):
             result = CrackResult(captureName: capture.fileName,
                                  ssid: targets.first?.displaySsid ?? "",
                                  password: nil, attempts: attempts, durationSeconds: duration,
-                                 dictionaryName: dictionary.name, found: false)
+                                 dictionaryName: dictionaryName, found: false)
         case .stopped(let attempts):
             result = CrackResult(captureName: capture.fileName,
                                  ssid: targets.first?.displaySsid ?? "",
                                  password: nil, attempts: attempts, durationSeconds: duration,
-                                 dictionaryName: dictionary.name, found: false)
+                                 dictionaryName: dictionaryName, found: false)
         }
         app.recordResult(result)
     }

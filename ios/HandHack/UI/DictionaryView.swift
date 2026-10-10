@@ -24,6 +24,7 @@ struct DictionaryView: View {
                         .accessibilityLabel("Добавить словарь")
                 }
             }
+            .supportToolbar()
             .onAppear { reload() }
             .fileImporter(
                 isPresented: $importing,
@@ -51,6 +52,14 @@ struct DictionaryView: View {
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     .padding(.vertical, 2)
+                }
+                .contextMenu {
+                    Button(role: .destructive) {
+                        DictionaryStore.remove(id: dictionary.id)
+                        reload()
+                    } label: {
+                        Label("Удалить", systemImage: "trash")
+                    }
                 }
             }
             .onDelete { offsets in

@@ -25,6 +25,7 @@ struct AttackView: View {
                     .accessibilityLabel("Добавить capture")
                 }
             }
+            .supportToolbar()
             .fileImporter(
                 isPresented: $importing,
                 allowedContentTypes: [.item],

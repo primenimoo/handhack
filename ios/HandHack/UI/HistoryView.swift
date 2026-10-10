@@ -29,6 +29,7 @@ struct HistoryView: View {
                 Button("Очистить", role: .destructive) { app.clearResults() }
                 Button("Отмена", role: .cancel) {}
             }
+            .supportToolbar()
         }
     }
 

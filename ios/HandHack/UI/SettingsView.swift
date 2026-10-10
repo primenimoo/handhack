@@ -24,6 +24,7 @@ struct SettingsView: View {
                     Link(destination: URL(string: "https://t.me/primenimooo")!) {
                         Label("@primenimooo", systemImage: "paperplane")
                     }
+                    SupportRow()
                 }
 
                 Section {
@@ -34,6 +35,7 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Настройки")
+            .supportToolbar()
         }
     }
 
