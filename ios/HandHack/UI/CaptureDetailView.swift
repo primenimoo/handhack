@@ -199,12 +199,7 @@ private struct AttackControl: View {
                         .font(.title3.monospaced().weight(.semibold))
                         .textSelection(.enabled)
                     Spacer()
-                    Button {
-                        UIPasteboard.general.string = password
-                    } label: {
-                        Image(systemName: "doc.on.doc")
-                    }
-                    .buttonStyle(.bordered)
+                    CopyPasswordButton(password: password)
                 }
                 Text("Попыток: \(attempts.formatted())")
                     .font(.caption).foregroundStyle(.secondary)

@@ -42,12 +42,16 @@ struct DictionaryView: View {
     private var list: some View {
         List {
             ForEach(dictionaries) { dictionary in
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(dictionary.name).font(.subheadline.weight(.semibold))
-                    Text("\(dictionary.size.formatted()) строк")
-                        .font(.caption).foregroundStyle(.secondary)
+                NavigationLink {
+                    DictionaryEditorView(id: dictionary.id, name: dictionary.name) { reload() }
+                } label: {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(dictionary.name).font(.subheadline.weight(.semibold))
+                        Text("\(dictionary.size.formatted()) строк")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 2)
                 }
-                .padding(.vertical, 2)
             }
             .onDelete { offsets in
                 for index in offsets {

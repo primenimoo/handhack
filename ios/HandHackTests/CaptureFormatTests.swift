@@ -155,6 +155,25 @@ final class CaptureFormatTests: XCTestCase {
         XCTAssertFalse(loaded.targets[0].verify("wrongpassword"))
     }
 
+    func testPmkidInMessageOneCracksWithoutMessageTwo() {
+        let frames = [beacon(), dataFrame(messageOneWithPmkid())]
+        let loaded = CaptureLoader.load(data: pcapBytes(frames: frames), name: "capture.pcap")
+        XCTAssertEqual(loaded.targets.count, 1)
+        XCTAssertEqual(loaded.targets[0].evidence, .pmkid)
+        XCTAssertTrue(loaded.targets[0].verify(passphrase))
+        XCTAssertFalse(loaded.targets[0].verify("wrongpassword"))
+        XCTAssertTrue(loaded.notes.isEmpty)
+    }
+
+    func testMessageThreeAndFourPairWithoutMessagesOneOrTwo() {
+        let frames = [beacon(), dataFrame(messageThree()), dataFrame(messageFour())]
+        let loaded = CaptureLoader.load(data: pcapBytes(frames: frames), name: "capture.pcap")
+        XCTAssertEqual(loaded.targets.count, 1)
+        XCTAssertEqual(loaded.targets[0].evidence, .eapolMic)
+        XCTAssertTrue(loaded.targets[0].verify(passphrase))
+        XCTAssertFalse(loaded.targets[0].verify("wrongpassword"))
+    }
+
     func testCaptureWithoutMessage2IsRefusedWithAReason() {
         let partial = pcapBytes(frames: [beacon(), dataFrame(messageOne())])
         let loaded = CaptureLoader.load(data: partial, name: "capture.pcap")
@@ -242,7 +261,7 @@ final class CaptureFormatTests: XCTestCase {
     }
 
     private func messageOne() -> [UInt8] {
-        eapolKey(keyInfo: keyInfo(keyType: 1, ack: true, secure: true),
+        eapolKey(keyInfo: keyInfo(ack: true, secure: true),
                  nonce: authenticatorNonce, replayCounter: 1)
     }
 
@@ -252,7 +271,7 @@ final class CaptureFormatTests: XCTestCase {
             authenticatorNonce: authenticatorNonce, supplicantNonce: supplicantNonce,
             keyDescriptorType: Prf.keyDescriptorCcmp)
         let withoutMic = eapolKey(
-            keyInfo: keyInfo(keyType: 2, install: true, mic: true, secure: true, encrypted: true),
+            keyInfo: keyInfo(mic: true, secure: true),
             nonce: supplicantNonce, replayCounter: 2)
         let mic = Array(Hmac.sha1(key: kck, withoutMic).prefix(PmkVerifier.micLength))
         var withMic = withoutMic
@@ -260,15 +279,52 @@ final class CaptureFormatTests: XCTestCase {
         return withMic
     }
 
-    private func keyInfo(keyType: Int, install: Bool = false, ack: Bool = false,
-                         mic: Bool = false, secure: Bool = false, encrypted: Bool = false) -> Int {
-        var value = 1
-        value |= (keyType << 1)
-        if install { value |= 0x08 }
-        if ack { value |= 0x10 }
-        if mic { value |= 0x20 }
-        if secure { value |= 0x40 }
-        if encrypted { value |= 0x80 }
+    /// The access point's message 3: it repeats the authenticator nonce and carries a MIC of its
+    /// own, so a capture that missed messages 1 and 2 can still be checked once message 4 arrives.
+    private func messageThree() -> [UInt8] {
+        let kck = Ptk.deriveKeyConfirmationKey(
+            pmk: pmk, authenticator: authenticator, supplicant: supplicant,
+            authenticatorNonce: authenticatorNonce, supplicantNonce: supplicantNonce,
+            keyDescriptorType: Prf.keyDescriptorCcmp)
+        let withoutMic = eapolKey(
+            keyInfo: keyInfo(install: true, ack: true, mic: true, secure: true),
+            nonce: authenticatorNonce, replayCounter: 3)
+        let mic = Array(Hmac.sha1(key: kck, withoutMic).prefix(PmkVerifier.micLength))
+        var withMic = withoutMic
+        for i in 0..<mic.count { withMic[PmkVerifier.micOffset + i] = mic[i] }
+        return withMic
+    }
+
+    /// The supplicant's final acknowledgement: it echoes the supplicant nonce and supplies the
+    /// second nonce a message-3 MIC needs.
+    private func messageFour() -> [UInt8] {
+        eapolKey(keyInfo: keyInfo(mic: true, secure: true),
+                 nonce: supplicantNonce, replayCounter: 4)
+    }
+
+    /// A message 1 that carries the PMKID in a key-data element, as an access point answers a
+    /// probe that asks for it — the shape a single-message PMKID capture has.
+    private func messageOneWithPmkid() -> [UInt8] {
+        var frame = messageOne()
+        let element: [UInt8] = [0xDD, 20, 0x00, 0x0F, 0xAC, 0x04] + pmkid
+        frame += element
+        frame[97] = UInt8((element.count >> 8) & 0xFF)
+        frame[98] = UInt8(element.count & 0xFF)
+        let bodyLength = frame.count - 4
+        frame[2] = UInt8((bodyLength >> 8) & 0xFF)
+        frame[3] = UInt8(bodyLength & 0xFF)
+        return frame
+    }
+
+    private func keyInfo(install: Bool = false, ack: Bool = false, mic: Bool = false,
+                         secure: Bool = false, encrypted: Bool = false) -> Int {
+        var value = Prf.keyDescriptorCcmp // key descriptor version lives in bits 0..2
+        value |= 0x0008                   // key type: pairwise (bit 3)
+        if install { value |= 0x0040 }
+        if ack { value |= 0x0080 }
+        if mic { value |= 0x0100 }
+        if secure { value |= 0x0200 }
+        if encrypted { value |= 0x1000 }
         return value
     }
 
@@ -277,15 +333,16 @@ final class CaptureFormatTests: XCTestCase {
         frame[0] = 0x01
         frame[1] = 0x03
         frame[4] = UInt8(Prf.keyDescriptorCcmp)
-        frame[5] = UInt8(keyInfo & 0xFF)
-        frame[6] = UInt8((keyInfo >> 8) & 0xFF)
+        // Key information is a big-endian field, exactly as it sits on the wire.
+        frame[5] = UInt8((keyInfo >> 8) & 0xFF)
+        frame[6] = UInt8(keyInfo & 0xFF)
         for i in 0..<8 {
             frame[9 + i] = UInt8((replayCounter >> UInt64((7 - i) * 8)) & 0xFF)
         }
         for i in 0..<nonce.count { frame[EapolKey.nonceOffset + i] = nonce[i] }
         let bodyLength = frame.count - 4
-        frame[2] = UInt8(bodyLength & 0xFF)
-        frame[3] = UInt8((bodyLength >> 8) & 0xFF)
+        frame[2] = UInt8((bodyLength >> 8) & 0xFF)
+        frame[3] = UInt8(bodyLength & 0xFF)
         return frame
     }
 

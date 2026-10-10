@@ -67,6 +67,16 @@ enum DictionaryStore {
         return Array(data)
     }
 
+    static func text(id: String) -> String {
+        guard let data = try? Data(contentsOf: url(id: id)) else { return "" }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    static func overwrite(id: String, text: String) throws {
+        ensureDirectory()
+        try Data(text.utf8).write(to: url(id: id), options: .atomic)
+    }
+
     static func sanitize(_ name: String) -> String {
         var allowed = CharacterSet.alphanumerics
         allowed.insert(charactersIn: "-_")

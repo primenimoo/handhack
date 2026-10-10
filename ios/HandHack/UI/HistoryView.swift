@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct HistoryView: View {
     @EnvironmentObject private var app: AppState
@@ -71,9 +72,13 @@ private struct ResultRow: View {
                     .foregroundStyle(.secondary)
             }
             if let password = result.password, result.found {
-                Text("Пароль: \(password)")
-                    .font(.callout.monospaced())
-                    .textSelection(.enabled)
+                HStack {
+                    Text("Пароль: \(password)")
+                        .font(.callout.monospaced())
+                        .textSelection(.enabled)
+                    Spacer()
+                    CopyPasswordButton(password: password)
+                }
             }
             Text("\(result.statusText) · \(result.attempts.formatted()) попыток · \(Int(result.durationSeconds)) с · \(result.dictionaryName)")
                 .font(.caption)
@@ -81,5 +86,26 @@ private struct ResultRow: View {
                 .lineLimit(2)
         }
         .padding(.vertical, 2)
+    }
+}
+
+/// Copies a found passphrase to the system clipboard and briefly shows a confirmation tick.
+struct CopyPasswordButton: View {
+    let password: String
+    @State private var copied = false
+
+    var body: some View {
+        Button {
+            UIPasteboard.general.string = password
+            copied = true
+            Task {
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                copied = false
+            }
+        } label: {
+            Image(systemName: copied ? "checkmark" : "doc.on.doc")
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel("Копировать пароль")
     }
 }
