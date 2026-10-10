@@ -92,6 +92,7 @@ private struct AttackControl: View {
 
     @State private var dictionaries: [DictionaryStore.Dictionary] = []
     @State private var enabledIDs: Set<String> = []
+    @State private var showingPicker = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -115,33 +116,12 @@ private struct AttackControl: View {
         dictionaries.filter { enabledIDs.contains($0.id) }
     }
 
-    /// The tick list the run will use. Every dictionary is ticked out of the box; the choice is
-    /// remembered across captures, so a user who only trusts their own list does not re-tick it.
+    /// The tick list the run will use, opened as a sheet so ticking (or "Выбрать все") can never
+    /// collapse the list under the user's finger. Every dictionary is ticked out of the box; the
+    /// choice is remembered across captures.
     private var dictionarySelector: some View {
-        DisclosureGroup {
-            if dictionaries.isEmpty {
-                Text("Нет словарей — добавьте их на вкладке «Словари».")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(dictionaries) { dictionary in
-                    Toggle(isOn: Binding(
-                        get: { enabledIDs.contains(dictionary.id) },
-                        set: { setEnabled(dictionary.id, $0) })) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(dictionary.name).font(.subheadline)
-                            Text("\(dictionary.size.formatted()) строк")
-                                .font(.caption2).foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                HStack {
-                    Button("Выбрать все") { selectAll(true) }
-                    Spacer()
-                    Button("Снять все") { selectAll(false) }
-                }
-                .font(.caption)
-            }
+        Button {
+            showingPicker = true
         } label: {
             HStack {
                 Image(systemName: "books.vertical")
@@ -149,10 +129,24 @@ private struct AttackControl: View {
                      ? "Выберите словари"
                      : "Словари: \(enabledIDs.count) из \(dictionaries.count)")
                     .lineLimit(1)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
             }
             .font(.subheadline)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .foregroundStyle(.primary)
         .disabled(runner.isRunning)
+        .sheet(isPresented: $showingPicker) {
+            DictionaryPicker(
+                dictionaries: dictionaries,
+                enabledIDs: $enabledIDs,
+                onChange: { DictionaryStore.setEnabledIDs($0) },
+                onReload: reloadDictionaries)
+        }
     }
 
     private var startButton: some View {
@@ -247,16 +241,6 @@ private struct AttackControl: View {
         enabledIDs = Set(DictionaryStore.enabled.map { $0.id })
     }
 
-    private func setEnabled(_ id: String, _ enabled: Bool) {
-        if enabled { enabledIDs.insert(id) } else { enabledIDs.remove(id) }
-        DictionaryStore.setEnabledIDs(enabledIDs)
-    }
-
-    private func selectAll(_ enabled: Bool) {
-        enabledIDs = enabled ? Set(dictionaries.map { $0.id }) : []
-        DictionaryStore.setEnabledIDs(enabledIDs)
-    }
-
     private func start() {
         let selected = enabledDictionaries
         let inputs = selected.compactMap { dictionary -> AttackRunner.DictionaryInput? in
@@ -272,7 +256,8 @@ private struct AttackControl: View {
             targets: targets,
             dictionaries: inputs,
             notifyOnFinish: app.settings.notifyOnFinish,
-            hapticsEnabled: app.settings.hapticsEnabled) { outcome, duration in
+            hapticsEnabled: app.settings.hapticsEnabled,
+            soundEnabled: app.settings.soundEnabled) { outcome, duration in
                 record(outcome, duration: duration, dictionaryName: names)
             }
     }
@@ -298,5 +283,80 @@ private struct AttackControl: View {
                                  dictionaryName: dictionaryName, found: false)
         }
         app.recordResult(result)
+    }
+}
+
+/// The sliding list of dictionaries a run can use. Ticking a row enables it without leaving the
+/// sheet; tapping the name opens the dictionary itself so its words can be read and edited.
+private struct DictionaryPicker: View {
+    let dictionaries: [DictionaryStore.Dictionary]
+    @Binding var enabledIDs: Set<String>
+    let onChange: (Set<String>) -> Void
+    let onReload: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if dictionaries.isEmpty {
+                    ContentUnavailableView("Нет словарей",
+                                           systemImage: "books.vertical",
+                                           description: Text("Добавьте словари на вкладке «Словари»."))
+                } else {
+                    List {
+                        ForEach(dictionaries) { dictionary in
+                            HStack(spacing: 12) {
+                                Button {
+                                    setEnabled(dictionary.id, !enabledIDs.contains(dictionary.id))
+                                } label: {
+                                    Image(systemName: enabledIDs.contains(dictionary.id)
+                                          ? "checkmark.circle.fill" : "circle")
+                                        .font(.title3)
+                                        .foregroundStyle(enabledIDs.contains(dictionary.id)
+                                                         ? AppTheme.accent : Color.secondary)
+                                }
+                                .buttonStyle(.plain)
+
+                                NavigationLink {
+                                    DictionaryEditorView(id: dictionary.id, name: dictionary.name,
+                                                         onSave: onReload)
+                                } label: {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(dictionary.name).font(.subheadline)
+                                        Text("\(dictionary.size.formatted()) строк")
+                                            .font(.caption2).foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Словари")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItemGroup(placement: .topBarLeading) {
+                    Button("Все") { selectAll(true) }
+                    Button("Ничего") { selectAll(false) }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Готово") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func setEnabled(_ id: String, _ enabled: Bool) {
+        var updated = enabledIDs
+        if enabled { updated.insert(id) } else { updated.remove(id) }
+        enabledIDs = updated
+        onChange(updated)
+    }
+
+    private func selectAll(_ enabled: Bool) {
+        let updated = enabled ? Set(dictionaries.map { $0.id }) : []
+        enabledIDs = updated
+        onChange(updated)
     }
 }

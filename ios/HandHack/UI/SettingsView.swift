@@ -11,6 +11,9 @@ struct SettingsView: View {
                     Toggle("Тактильный отклик", isOn: Binding(
                         get: { app.settings.hapticsEnabled },
                         set: { app.setHapticsEnabled($0) }))
+                    Toggle("Звук при находке", isOn: Binding(
+                        get: { app.settings.soundEnabled },
+                        set: { app.setSoundEnabled($0) }))
                     Toggle("Уведомление по завершении", isOn: Binding(
                         get: { app.settings.notifyOnFinish },
                         set: { value in

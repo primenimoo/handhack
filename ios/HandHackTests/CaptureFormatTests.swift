@@ -245,6 +245,74 @@ final class CaptureFormatTests: XCTestCase {
         XCTAssertEqual(PcapReader.detect(Array("hello world, not a capture at all".utf8)).kind, .unknown)
     }
 
+    // MARK: engine really walks the dictionary
+
+    func testEngineFindsPasswordInDictionaryInFileOrder() {
+        let engine = AnalysisEngine()
+        let dictionary = Array("wrongpass\nnope123456\ncorrecthorse1\ntrailings\nafterwards\n".utf8)
+        let outcome = engine.crack(targets: [micTarget()], dictionaryBytes: dictionary)
+        guard case .found(let password, let ssid, let attempts) = outcome else {
+            return XCTFail("engine did not recover the password: \(outcome)")
+        }
+        XCTAssertEqual(password, "correcthorse1")
+        XCTAssertEqual(ssid, ssid)
+        XCTAssertEqual(attempts, 3)
+    }
+
+    func testEngineReportsTheExactLineItMatched() {
+        let engine = AnalysisEngine()
+        // The real passphrase is lowercase; the uppercase line must be tested as-is and rejected.
+        let dictionary = Array("CorrectHorse1\ncorrecthorse1\n".utf8)
+        let outcome = engine.crack(targets: [micTarget()], dictionaryBytes: dictionary)
+        guard case .found(let password, _, let attempts) = outcome else {
+            return XCTFail("engine did not recover the password: \(outcome)")
+        }
+        XCTAssertEqual(password, "correcthorse1")
+        XCTAssertEqual(attempts, 2)
+    }
+
+    func testEngineReportsNotFoundForAnAbsentPassword() {
+        let engine = AnalysisEngine()
+        let dictionary = Array("wrongpass\nnope123456\n".utf8)
+        let outcome = engine.crack(targets: [micTarget()], dictionaryBytes: dictionary)
+        guard case .notFound(let attempts) = outcome else {
+            return XCTFail("engine should not have found a password: \(outcome)")
+        }
+        XCTAssertEqual(attempts, 2)
+    }
+
+    func testEngineSkipsLinesOutsideTheWpaLengthRuleWithoutCountingThem() {
+        let engine = AnalysisEngine()
+        // "short" is 5 bytes and would already fail; the long line is 64 bytes. Neither is a WPA
+        // passphrase, so neither is derived or counted.
+        let dictionary = Array("short\n\(String(repeating: "x", count: 64))\ncorrecthorse1\n".utf8)
+        let outcome = engine.crack(targets: [micTarget()], dictionaryBytes: dictionary)
+        guard case .found(let password, _, let attempts) = outcome else {
+            return XCTFail("engine did not recover the password: \(outcome)")
+        }
+        XCTAssertEqual(password, "correcthorse1")
+        XCTAssertEqual(attempts, 1)
+    }
+
+    func testEngineChecksEveryNetworkInTheCapture() {
+        let engine = AnalysisEngine()
+        let other = MicTarget.build(
+            ssid: Array("OtherNet".utf8),
+            mic: Array(messageTwo()[PmkVerifier.micOffset..<PmkVerifier.micOffset + PmkVerifier.micLength]),
+            authenticator: authenticator, supplicant: supplicant,
+            authenticatorNonce: authenticatorNonce, supplicantNonce: supplicantNonce,
+            keyDescriptorType: Prf.keyDescriptorCcmp, message: messageTwo(), rawLabel: "other")!
+        // The password only belongs to the first network, so the first dictionary line (which does
+        // not match either) advances past both networks before the second line matches.
+        let dictionary = Array("wrongpass\ncorrecthorse1\n".utf8)
+        let outcome = engine.crack(targets: [micTarget(), other], dictionaryBytes: dictionary)
+        guard case .found(let password, _, let attempts) = outcome else {
+            return XCTFail("engine did not recover the password: \(outcome)")
+        }
+        XCTAssertEqual(password, "correcthorse1")
+        XCTAssertEqual(attempts, 3) // two derivations for line 1, one match for line 2's network
+    }
+
     // MARK: fixtures
 
     private func micTarget() -> HandshakeTarget {

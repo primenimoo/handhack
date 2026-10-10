@@ -29,11 +29,13 @@ final class AttackRunner: ObservableObject {
     private var completion: ((AnalysisEngine.Outcome, Double) -> Void)?
     private var notifyOnFinish = false
     private var hapticsEnabled = true
+    private var soundEnabled = true
 
     private var targets: [HandshakeTarget] = []
     private var dictionaries: [DictionaryInput] = []
     private var nextDictionary = 0
     private var accumulatedAttempts = 0
+    private var userStopped = false
 
     var isRunning: Bool {
         if case .running = phase { return true }
@@ -53,6 +55,7 @@ final class AttackRunner: ObservableObject {
         dictionaries: [DictionaryInput],
         notifyOnFinish: Bool,
         hapticsEnabled: Bool,
+        soundEnabled: Bool,
         onComplete: @escaping (AnalysisEngine.Outcome, Double) -> Void
     ) {
         guard !isRunning else { return }
@@ -64,6 +67,8 @@ final class AttackRunner: ObservableObject {
         self.accumulatedAttempts = 0
         self.notifyOnFinish = notifyOnFinish
         self.hapticsEnabled = hapticsEnabled
+        self.soundEnabled = soundEnabled
+        self.userStopped = false
 
         phase = .idle
         startedAt = Date()
@@ -74,7 +79,10 @@ final class AttackRunner: ObservableObject {
         runCurrentDictionary()
     }
 
+    /// Stops the run on the user's request. The engine reports back with `.stopped`, which the
+    /// next `onFinish` turns into a terminal result instead of quietly starting the next list.
     func stop() {
+        userStopped = true
         engine.stop()
     }
 
@@ -98,6 +106,10 @@ final class AttackRunner: ObservableObject {
             },
             onFinish: { [weak self] outcome in
                 guard let self else { return }
+                if self.userStopped {
+                    self.finish(.stopped(attempts: self.accumulatedAttempts + outcome.attempts))
+                    return
+                }
                 switch outcome {
                 case .found(let password, let ssid, let attempts):
                     self.finish(.found(password: password, ssid: ssid,
@@ -127,7 +139,9 @@ final class AttackRunner: ObservableObject {
         completion = nil
         currentDictionary = nil
         startedAt = nil
+        userStopped = false
         if hapticsEnabled { Self.haptic(for: outcome) }
+        if case .found = outcome, soundEnabled { SuccessSound.shared.play() }
         if notifyOnFinish { Self.notify(outcome) }
     }
 

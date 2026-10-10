@@ -70,6 +70,13 @@ final class AppState: ObservableObject {
         settings = copy
     }
 
+    func setSoundEnabled(_ value: Bool) {
+        guard settings.soundEnabled != value else { return }
+        var copy = settings
+        copy.soundEnabled = value
+        settings = copy
+    }
+
     func setNotifyOnFinish(_ value: Bool) {
         guard settings.notifyOnFinish != value else { return }
         var copy = settings

@@ -122,7 +122,20 @@ struct CrackResult: Identifiable, Codable, Equatable {
 
 struct AppSettings: Codable, Equatable {
     var hapticsEnabled = true
+    var soundEnabled = true
     var notifyOnFinish = false
     var firstLaunch = true
     static let `default` = AppSettings()
+
+    init() {}
+
+    /// Lenient decoding: a settings file written by an older build is missing the keys added
+    /// later, so every field falls back to its default instead of failing the whole state load.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        hapticsEnabled = try container.decodeIfPresent(Bool.self, forKey: .hapticsEnabled) ?? true
+        soundEnabled = try container.decodeIfPresent(Bool.self, forKey: .soundEnabled) ?? true
+        notifyOnFinish = try container.decodeIfPresent(Bool.self, forKey: .notifyOnFinish) ?? false
+        firstLaunch = try container.decodeIfPresent(Bool.self, forKey: .firstLaunch) ?? true
+    }
 }
