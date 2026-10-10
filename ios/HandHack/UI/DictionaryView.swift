@@ -6,6 +6,7 @@ struct DictionaryView: View {
     @State private var importing = false
     @State private var message: String?
     @State private var showMessage = false
+    @StateObject private var downloader = DictionaryDownloader()
 
     var body: some View {
         NavigationStack {
@@ -54,6 +55,16 @@ struct DictionaryView: View {
                 }
                 reload()
             }
+
+            Section {
+                downloadButton
+                if downloader.isDownloading { progressView }
+            } header: {
+                Text("Загрузить из GitHub")
+            } footer: {
+                Text("Словарь скачается и сразу появится в списке — его можно так же удалить или заменить.")
+                    .font(.caption2)
+            }
         }
     }
 
@@ -64,11 +75,12 @@ struct DictionaryView: View {
                 .foregroundStyle(AppTheme.accent)
             Text("Нет словарей")
                 .font(.title3.bold())
-            Text("Добавьте текстовый файл со списком паролей, по одному в строке.")
+            Text("Добавьте текстовый файл со списком паролей, по одному в строке — или скачайте готовый словарь.")
                 .font(.subheadline)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 32)
+
             Button {
                 importing = true
             } label: {
@@ -77,12 +89,59 @@ struct DictionaryView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(AppTheme.accent)
+
+            downloadButton
+
+            if downloader.isDownloading { progressView }
         }
         .padding()
     }
 
+    /// A deliberately colourless button: it is a secondary action next to "Добавить файл".
+    private var downloadButton: some View {
+        Button {
+            startDownload(RemoteDictionaryCatalog.all[0])
+        } label: {
+            Label("Скачать с GitHub", systemImage: "arrow.down.circle")
+                .font(.headline)
+        }
+        .buttonStyle(.bordered)
+        .tint(.gray)
+        .disabled(downloader.isDownloading)
+    }
+
+    private var progressView: some View {
+        VStack(spacing: 8) {
+            ProgressView(value: downloader.progress)
+                .tint(AppTheme.accent)
+            HStack {
+                Text(downloader.statusText)
+                Spacer()
+                Text("\(Int(downloader.progress * 100))%")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: 300)
+    }
+
     private func reload() {
         dictionaries = DictionaryStore.all
+    }
+
+    private func startDownload(_ remote: RemoteDictionary) {
+        Task {
+            do {
+                let bytes = try await downloader.download(remote)
+                reload()
+                message = "Словарь «\(remote.title)» загружен: \(bytes.formatted()) байт, " +
+                    "\((DictionaryStore.fetchSize(remote.id)).formatted()) строк."
+                showMessage = true
+            } catch {
+                message = "Не удалось скачать словарь: \(error.localizedDescription)"
+                showMessage = true
+            }
+        }
     }
 
     private func handleImport(_ result: Result<[URL], Error>) {

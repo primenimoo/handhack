@@ -4,11 +4,11 @@ import SwiftUI
 /// Liquid Glass layer on iOS 26 sits on top and feels native; this palette is only the colour
 /// accent the app is known by.
 enum AppTheme {
-    static let accent = Color(red: 0.34, green: 0.60, blue: 1.00, opacity: 1)
-    static let violet = Color(red: 0.62, green: 0.40, blue: 1.00, opacity: 1)
+    static let accent = Color(red: 0.10, green: 0.45, blue: 1.00, opacity: 1)
+    static let sky = Color(red: 0.55, green: 0.78, blue: 1.00, opacity: 1)
 
     static let gradient = LinearGradient(
-        colors: [accent, violet],
+        colors: [accent, sky],
         startPoint: .topLeading,
         endPoint: .bottomTrailing)
 
