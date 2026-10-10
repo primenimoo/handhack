@@ -78,7 +78,7 @@ enum WirelessCaptureParser {
             guard let eapol = findEapol(frame, control) else { continue }
             guard EapolKey.isEapolKey(eapol) else { continue }
 
-            let pair = identifyEndpoints(address1, address2, address3, control, ssidByBssid)
+            let pair = identifyEndpoints(address1, address2, address3, control, ssidByBssid: ssidByBssid)
             messages.append(Message(
                 authenticator: pair.0,
                 supplicant: pair.1,

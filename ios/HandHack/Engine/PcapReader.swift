@@ -101,8 +101,8 @@ enum PcapReader {
             let payload = Array(data[payloadStart..<payloadStart + capturedLength])
             frames.append(CapturedFrame(
                 data: stripRadiotap(payload, container.linkType),
-                timestampSeconds: seconds,
-                timestampFraction: nanoseconds ? fraction / 1000 : fraction))
+                timestampSeconds: UInt64(seconds),
+                timestampFraction: UInt64(nanoseconds ? fraction / 1000 : fraction)))
             offset = payloadStart + capturedLength
         }
         return frames
@@ -140,12 +140,12 @@ enum PcapReader {
 
             case 1:
                 let id = linkTypes.count
-                linkTypes[id] = body.count >= 2 ? u16(body, 0, bigEndian) : -1
+                linkTypes[id] = body.count >= 2 ? u16(body, 0, bigEndian: bigEndian) : -1
 
             case 6:
-                guard let linkType = linkTypes[Int(u32(body, 0, bigEndian))] else { break }
+                guard let linkType = linkTypes[Int(u32(body, 0, bigEndian: bigEndian))] else { break }
                 guard isSupportedLinkType(linkType) else { break }
-                let capturedLength = Int(u32(body, 12, bigEndian))
+                let capturedLength = Int(u32(body, 12, bigEndian: bigEndian))
                 if capturedLength <= 0 || capturedLength > maxFrameBytes { break }
                 let endIndex = 20 + capturedLength
                 guard endIndex <= body.count else { break }

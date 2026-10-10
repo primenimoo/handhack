@@ -91,7 +91,8 @@ final class AnalysisEngine {
         var decoded: [UInt8] = []
         while index < bytes.count {
             if bytes[index] == 0x5C && index + 3 < bytes.count && bytes[index + 1] == 0x78 {
-                if let value = UInt8(String(bytes: bytes[index + 2..<index + 4], encoding: .ascii), radix: 16) {
+                if let text = String(bytes: bytes[index + 2..<index + 4], encoding: .ascii),
+                   let value = UInt8(text, radix: 16) {
                     decoded.append(value)
                     index += 4
                     continue
@@ -218,10 +219,10 @@ final class AnalysisEngine {
     private static func isolateSsid(_ ssids: [[UInt8]]) -> [UInt8] {
         var allowed = Set<UInt8>()
         for ssid in ssids { for byte in ssid { allowed.insert(byte) } }
-        allowed.insert(contentsOf: Array((0x41...0x5A).map { UInt8($0) })) // A-Z
-        allowed.insert(contentsOf: Array((0x61...0x7A).map { UInt8($0) })) // a-z
-        allowed.insert(contentsOf: Array((0x30...0x39).map { UInt8($0) })) // 0-9
-        allowed.insert(contentsOf: Array((0xC0...0xFF).map { UInt8($0) })) // Cyrillic block
+        allowed.formUnion(Array((0x41...0x5A).map { UInt8($0) })) // A-Z
+        allowed.formUnion(Array((0x61...0x7A).map { UInt8($0) })) // a-z
+        allowed.formUnion(Array((0x30...0x39).map { UInt8($0) })) // 0-9
+        allowed.formUnion(Array((0xC0...0xFF).map { UInt8($0) })) // Cyrillic block
         return Array(allowed).sorted()
     }
 }
