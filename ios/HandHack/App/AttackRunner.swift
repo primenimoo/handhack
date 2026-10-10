@@ -30,17 +30,17 @@ final class AttackRunner: ObservableObject {
     private var notifyOnFinish = false
     private var hapticsEnabled = true
     private var soundEnabled = true
+    private var soundChoice: SuccessSoundChoice = .original
 
     private var targets: [HandshakeTarget] = []
     private var dictionaries: [DictionaryInput] = []
     private var nextDictionary = 0
     private var accumulatedAttempts = 0
     private var userStopped = false
+    private var running = false
+    var speed: AttackSpeed = .balanced
 
-    var isRunning: Bool {
-        if case .running = phase { return true }
-        return false
-    }
+    var isRunning: Bool { running }
 
     var wasFound: Bool {
         if case .finished(.found) = phase { return true }
@@ -53,6 +53,8 @@ final class AttackRunner: ObservableObject {
     func start(
         targets: [HandshakeTarget],
         dictionaries: [DictionaryInput],
+        speed: AttackSpeed = .balanced,
+        soundChoice: SuccessSoundChoice = .original,
         notifyOnFinish: Bool,
         hapticsEnabled: Bool,
         soundEnabled: Bool,
@@ -68,8 +70,11 @@ final class AttackRunner: ObservableObject {
         self.notifyOnFinish = notifyOnFinish
         self.hapticsEnabled = hapticsEnabled
         self.soundEnabled = soundEnabled
+        self.soundChoice = soundChoice
+        self.speed = speed
         self.userStopped = false
 
+        running = true
         phase = .idle
         startedAt = Date()
         completion = onComplete
@@ -98,6 +103,7 @@ final class AttackRunner: ObservableObject {
         engine.start(
             targets: targets,
             dictionaryBytes: dictionary.bytes,
+            maxAttemptsPerSecond: speed.maxAttemptsPerSecond,
             onProgress: { [weak self] progress in
                 DispatchQueue.main.async {
                     guard let self, self.isRunning || self.phaseIsIdle else { return }
@@ -131,6 +137,7 @@ final class AttackRunner: ObservableObject {
     }
 
     private func finish(_ outcome: AnalysisEngine.Outcome) {
+        running = false
         let duration = startedAt.map { Date().timeIntervalSince($0) } ?? 0
         phase = .finished(outcome)
         // The completion handler still needs to know which dictionary was in flight when the run
@@ -141,7 +148,7 @@ final class AttackRunner: ObservableObject {
         startedAt = nil
         userStopped = false
         if hapticsEnabled { Self.haptic(for: outcome) }
-        if case .found = outcome, soundEnabled { SuccessSound.shared.play() }
+        if case .found = outcome, soundEnabled { SuccessSound.shared.play(choice: soundChoice) }
         if notifyOnFinish { Self.notify(outcome) }
     }
 

@@ -14,7 +14,11 @@ struct RootView: View {
             SettingsView()
                 .tabItem { Label("Настройки", systemImage: "gearshape") }
         }
-        .tint(AppTheme.accent)
+        .tint(app.settings.accentColor.color)
+        .onAppear { AppTheme.current = app.settings.accentColor.color }
+        .onChange(of: app.settings.accentColor) { preset in
+            AppTheme.current = preset.color
+        }
         .fullScreenCover(isPresented: Binding(
             get: { app.settings.firstLaunch },
             set: { _ in app.setFirstLaunch(false) })) {

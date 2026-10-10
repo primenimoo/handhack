@@ -84,6 +84,61 @@ final class AppState: ObservableObject {
         settings = copy
     }
 
+    func setAccentColor(_ value: AccentColorPreset) {
+        guard settings.accentColor != value else { return }
+        var copy = settings
+        copy.accentColor = value
+        settings = copy
+    }
+
+    func setFinishSound(_ value: SuccessSoundChoice) {
+        guard settings.finishSound != value else { return }
+        var copy = settings
+        copy.finishSound = value
+        settings = copy
+    }
+
+    func setAttackSpeed(_ value: AttackSpeed) {
+        guard settings.attackSpeed != value else { return }
+        var copy = settings
+        copy.attackSpeed = value
+        settings = copy
+    }
+
+    func setAutoRunAfterAnalysis(_ value: Bool) {
+        guard settings.autoRunAfterAnalysis != value else { return }
+        var copy = settings
+        copy.autoRunAfterAnalysis = value
+        settings = copy
+    }
+
+    // MARK: Results
+
+    /// Turns an engine outcome into a persistent history entry and appends it to the list.
+    /// Capture detail and History's "Повторить" share this so every result is shaped the same.
+    @discardableResult
+    func addResult(outcome: AnalysisEngine.Outcome, durationSeconds: Double,
+                   captureID: UUID?, captureName: String, fallbackSsid: String,
+                   dictionaryName: String) -> CrackResult {
+        let result: CrackResult
+        switch outcome {
+        case .found(let password, let ssid, let attempts):
+            result = CrackResult(captureName: captureName, ssid: ssid, password: password,
+                                 attempts: attempts, durationSeconds: durationSeconds,
+                                 dictionaryName: dictionaryName, found: true, captureID: captureID)
+        case .notFound(let attempts):
+            result = CrackResult(captureName: captureName, ssid: fallbackSsid, password: nil,
+                                 attempts: attempts, durationSeconds: durationSeconds,
+                                 dictionaryName: dictionaryName, found: false, captureID: captureID)
+        case .stopped(let attempts):
+            result = CrackResult(captureName: captureName, ssid: fallbackSsid, password: nil,
+                                 attempts: attempts, durationSeconds: durationSeconds,
+                                 dictionaryName: dictionaryName, found: false, captureID: captureID)
+        }
+        recordResult(result)
+        return result
+    }
+
     // MARK: Persistence
 
     private func persist() {

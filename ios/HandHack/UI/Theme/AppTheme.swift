@@ -4,16 +4,45 @@ import SwiftUI
 /// Liquid Glass layer on iOS 26 sits on top and feels native; this palette is only the colour
 /// accent the app is known by.
 enum AppTheme {
-    static let accent = Color(red: 0.10, green: 0.45, blue: 1.00, opacity: 1)
     static let sky = Color(red: 0.55, green: 0.78, blue: 1.00, opacity: 1)
 
-    static let gradient = LinearGradient(
-        colors: [accent, sky],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing)
+    /// The accent currently in effect. RootView sets it every time the user changes the theme,
+    /// so screens that reach for `AppTheme.accent` at build time always render the chosen colour.
+    static var current: Color = AccentColorPreset.blue.color
+    static var accent: Color { current }
+
+    static var gradient: LinearGradient {
+        LinearGradient(
+            colors: [accent, sky],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing)
+    }
 
     static let success = Color.green
     static let danger = Color.red
+
+    /// A colour per kind of key material, so evidence chips never melt into the accent tint.
+    static func evidenceColor(_ evidence: CaptureEvidence) -> Color {
+        switch evidence {
+        case .pmk: return Color(red: 0.10, green: 0.60, blue: 0.38)
+        case .pmkid: return Color(red: 0.95, green: 0.55, blue: 0.12)
+        case .eapolMic: return Color(red: 0.55, green: 0.35, blue: 0.95)
+        }
+    }
+}
+
+extension AccentColorPreset {
+    /// The concrete colour a preset stands for.
+    var color: Color {
+        switch self {
+        case .blue: return Color(red: 0.10, green: 0.45, blue: 1.00)
+        case .purple: return Color(red: 0.52, green: 0.33, blue: 0.95)
+        case .teal: return Color(red: 0.08, green: 0.62, blue: 0.72)
+        case .green: return Color(red: 0.10, green: 0.62, blue: 0.38)
+        case .orange: return Color(red: 1.00, green: 0.56, blue: 0.12)
+        case .pink: return Color(red: 0.90, green: 0.30, blue: 0.56)
+        }
+    }
 }
 
 extension View {

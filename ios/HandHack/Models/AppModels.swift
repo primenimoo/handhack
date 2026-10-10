@@ -99,9 +99,11 @@ struct CrackResult: Identifiable, Codable, Equatable {
     var dictionaryName: String
     var found: Bool
     var date: Date
+    /// Lets "Повторить" in History take the user straight back to the same capture file.
+    var captureID: UUID?
 
     init(captureName: String, ssid: String, password: String?, attempts: Int,
-         durationSeconds: Double, dictionaryName: String, found: Bool) {
+         durationSeconds: Double, dictionaryName: String, found: Bool, captureID: UUID? = nil) {
         id = UUID()
         self.captureName = captureName
         self.ssid = ssid
@@ -111,6 +113,28 @@ struct CrackResult: Identifiable, Codable, Equatable {
         self.dictionaryName = dictionaryName
         self.found = found
         date = Date()
+        self.captureID = captureID
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, captureName, ssid, password, attempts, durationSeconds,
+             dictionaryName, found, date, captureID
+    }
+
+    /// Lenient decode: results saved by an older build have no `captureID`, which must fall back
+    /// to nil instead of failing to load the whole history.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        captureName = try container.decode(String.self, forKey: .captureName)
+        ssid = try container.decode(String.self, forKey: .ssid)
+        password = try container.decodeIfPresent(String.self, forKey: .password)
+        attempts = try container.decodeIfPresent(Int.self, forKey: .attempts) ?? 0
+        durationSeconds = try container.decodeIfPresent(Double.self, forKey: .durationSeconds) ?? 0
+        dictionaryName = try container.decodeIfPresent(String.self, forKey: .dictionaryName) ?? ""
+        found = try container.decodeIfPresent(Bool.self, forKey: .found) ?? false
+        date = try container.decodeIfPresent(Date.self, forKey: .date) ?? Date(timeIntervalSince1970: 0)
+        captureID = try container.decodeIfPresent(UUID.self, forKey: .captureID)
     }
 
     var statusText: String {
@@ -125,6 +149,10 @@ struct AppSettings: Codable, Equatable {
     var soundEnabled = true
     var notifyOnFinish = false
     var firstLaunch = true
+    var accentColor: AccentColorPreset = .blue
+    var finishSound: SuccessSoundChoice = .original
+    var attackSpeed: AttackSpeed = .balanced
+    var autoRunAfterAnalysis = true
     static let `default` = AppSettings()
 
     init() {}
@@ -137,5 +165,9 @@ struct AppSettings: Codable, Equatable {
         soundEnabled = try container.decodeIfPresent(Bool.self, forKey: .soundEnabled) ?? true
         notifyOnFinish = try container.decodeIfPresent(Bool.self, forKey: .notifyOnFinish) ?? false
         firstLaunch = try container.decodeIfPresent(Bool.self, forKey: .firstLaunch) ?? true
+        accentColor = try container.decodeIfPresent(AccentColorPreset.self, forKey: .accentColor) ?? .blue
+        finishSound = try container.decodeIfPresent(SuccessSoundChoice.self, forKey: .finishSound) ?? .original
+        attackSpeed = try container.decodeIfPresent(AttackSpeed.self, forKey: .attackSpeed) ?? .balanced
+        autoRunAfterAnalysis = try container.decodeIfPresent(Bool.self, forKey: .autoRunAfterAnalysis) ?? true
     }
 }

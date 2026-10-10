@@ -56,6 +56,7 @@ final class AnalysisEngine {
     func start(
         targets: [HandshakeTarget],
         dictionaryBytes: [UInt8],
+        maxAttemptsPerSecond: Double? = nil,
         onProgress: @escaping ProgressCallback,
         onFinish: @escaping FinishCallback
     ) {
@@ -68,7 +69,9 @@ final class AnalysisEngine {
         queue.async { [weak self] in
             guard let self else { return }
             let outcome = self.search(job: thisJob, targets: targets,
-                                      dictionaryBytes: dictionaryBytes, onProgress: onProgress)
+                                      dictionaryBytes: dictionaryBytes,
+                                      maxAttemptsPerSecond: maxAttemptsPerSecond,
+                                      onProgress: onProgress)
             DispatchQueue.main.async {
                 guard self.job === thisJob else {
                     self.isRunning = false
@@ -88,7 +91,8 @@ final class AnalysisEngine {
     /// Synchronous run used by the tests: it exercises the exact same loop as [start] with no
     /// dispatch and no cancellation.
     func crack(targets: [HandshakeTarget], dictionaryBytes: [UInt8]) -> Outcome {
-        search(job: Job(), targets: targets, dictionaryBytes: dictionaryBytes, onProgress: { _ in })
+        search(job: Job(), targets: targets, dictionaryBytes: dictionaryBytes,
+               maxAttemptsPerSecond: nil, onProgress: { _ in })
     }
 
     // MARK: - Run
@@ -97,6 +101,7 @@ final class AnalysisEngine {
         job: Job,
         targets: [HandshakeTarget],
         dictionaryBytes: [UInt8],
+        maxAttemptsPerSecond: Double?,
         onProgress: ProgressCallback
     ) -> Outcome {
         let lines = DictionaryLines.split(dictionaryBytes)
@@ -128,6 +133,17 @@ final class AnalysisEngine {
         for (lineIndex, line) in lines.enumerated() {
             if job.cancelled {
                 return .stopped(attempts: attempts)
+            }
+
+            if let cap = maxAttemptsPerSecond, attempts > 40, lineIndex % 12 == 0 {
+                let elapsed = max(ProcessInfo.processInfo.systemUptime - started, 0.001)
+                let currentRate = Double(attempts) / elapsed
+                if currentRate > cap {
+                    // Pause just long enough to pull the running average back under the cap; the
+                    // sleep is bounded so a heavy list never stalls behind a burst of cheap lines.
+                    let pause = min(0.08, (currentRate / cap - 1) * 0.012)
+                    Thread.sleep(forTimeInterval: pause)
+                }
             }
 
             let candidateBytes = Array(line)

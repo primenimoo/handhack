@@ -3,9 +3,10 @@ import AudioToolbox
 import Foundation
 import UIKit
 
-/// The success sound the user chose: a short mp3 bundled in the asset catalog, played as a soft
-/// alert that mixes with whatever else is on screen. If the asset were ever missing the app falls
-/// back to the iPhone system confirmation tick (1104) so a found password is never silent.
+/// The success sound the user chose: either the bundled mp3 they gave (the default) or one of
+/// the short generated wav files, played as a soft alert that mixes with whatever else is on
+/// screen. If an asset were ever missing the app falls back to the iPhone system confirmation
+/// tick (1104) so a found password is never silent.
 final class SuccessSound {
     static let shared = SuccessSound()
 
@@ -16,8 +17,11 @@ final class SuccessSound {
 
     private init() {}
 
-    func play() {
-        guard let data = NSDataAsset(name: "SuccessSound")?.data else {
+    /// Plays the tone chosen in Settings, falling back to the user's mp3, then to the system tick.
+    func play(choice: SuccessSoundChoice = .original) {
+        let data = choice.assetName.flatMap { NSDataAsset(name: $0)?.data }
+            ?? NSDataAsset(name: "SuccessSound")?.data
+        guard let data else {
             AudioServicesPlaySystemSound(Self.fallbackTickSoundId)
             return
         }
