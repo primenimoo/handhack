@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.HandHack" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowBackground">@color/handhack_splash_light</item>
+    </style>
+
+    <style name="Theme.HandHack.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/handhack_splash_light</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_handhack_logo</item>
+        <item name="postSplashScreenTheme">@style/Theme.HandHack</item>
+    </style>
+</resources>

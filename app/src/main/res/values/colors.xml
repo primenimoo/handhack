@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="handhack_splash_light">#FFF6F9F7</color>
+    <color name="handhack_splash_dark">#FF0C1210</color>
+    <color name="ic_launcher_background">#FF12211B</color>
+</resources>

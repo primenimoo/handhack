@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">HandHack</string>
+    <string name="app_tagline">Локальный инструмент для работы с файлами</string>
+    <string name="developer_handle">@primenimooo</string>
+    <string name="telegram_url" translatable="false">https://t.me/primenimooo</string>
+    <string name="default_dictionary_asset" translatable="false">raw/special.txt</string>
+
+    <string name="channel_progress">Подбор файла</string>
+    <string name="channel_progress_desc">Уведомления о ходе подбора</string>
+    <string name="channel_status">Статус HandHack</string>
+    <string name="channel_status_desc">Завершение подбора, ошибки и результаты импорта</string>
+    <string name="notify_progress_title">HandHack: %1$s</string>
+    <string name="notify_progress_text">Обработано %1$s из %2$s</string>
+    <string name="notify_done_title">Подбор завершён</string>
+    <string name="notify_no_result_title">Совпадений не найдено</string>
+    <string name="notify_error_title">Ошибка подбора</string>
+    <string name="notify_import_title">Импорт словаря завершён</string>
+
+    <string name="cd_app_logo">Логотип HandHack</string>
+    <string name="cd_settings">Настройки</string>
+    <string name="cd_back">Назад</string>
+    <string name="cd_copy">Скопировать</string>
+    <string name="cd_close">Закрыть</string>
+    <string name="cd_telegram">Открыть Telegram разработчика</string>
+    <string name="cd_progress">Прогресс подбора</string>
+    <string name="cd_dictionary">Словарь</string>
+    <string name="cd_history">История</string>
+</resources>

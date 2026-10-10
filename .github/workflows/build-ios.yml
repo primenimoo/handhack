@@ -1,0 +1,71 @@
+name: Build iOS IPA
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  ipa:
+    name: Unsigned IPA
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select newest Xcode
+        run: |
+          set -e
+          echo "Installed Xcodes:"
+          ls -d /Applications/Xcode*.app 2>/dev/null || true
+          LATEST=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n1)
+          echo "Using: $LATEST"
+          sudo xcode-select -s "$LATEST"
+          xcodebuild -version
+
+      - name: Build (unsigned, device)
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project HandHack.xcodeproj \
+            -scheme HandHack \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Unit tests (non-blocking)
+        working-directory: ios
+        continue-on-error: true
+        run: |
+          xcodebuild test \
+            -project HandHack.xcodeproj \
+            -scheme HandHack \
+            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Package unsigned IPA
+        working-directory: ios
+        run: |
+          set -e
+          APP=$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -n1)
+          echo "App bundle: $APP"
+          test -n "$APP"
+          rm -rf Payload
+          mkdir Payload
+          cp -R "$APP" Payload/
+          ditto -c -k --sequesterRsrc --keepParent Payload HandHack-unsigned.ipa
+          ls -lh HandHack-unsigned.ipa
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: HandHack-unsigned-ipa
+          path: ios/HandHack-unsigned.ipa
+          if-no-files-found: error

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The launcher artwork supplied for HandHack is a full-bleed square image.
+  It is placed on the background layer at native aspect ratio so that the
+  launcher mask never crops or stretches the original artwork.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@android:color/transparent" />
+</layer-list>

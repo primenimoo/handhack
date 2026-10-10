@@ -1,0 +1,29 @@
+# Android / Gradle
+.gradle/
+.kotlin/
+build/
+local.properties
+dist/
+*.apk
+*.aab
+captures/
+*.jks
+*.keystore
+
+# IDE / OS
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+
+# iOS build output
+ios/build/
+ios/Payload/
+ios/*.ipa
+DerivedData/
+*.xcuserstate
+xcuserdata/
+
+# JVM crash logs
+replay_pid*.log
+hs_err_pid*.log

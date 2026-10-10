@@ -1,0 +1,2 @@
+-dontwarn kotlinx.coroutines.**
+-keepclassmembers class kotlinx.coroutines.** { volatile <fields>; }
