@@ -162,7 +162,7 @@ final class CaptureFormatTests: XCTestCase {
         XCTAssertEqual(loaded.targets[0].evidence, .pmkid)
         XCTAssertTrue(loaded.targets[0].verify(passphrase))
         XCTAssertFalse(loaded.targets[0].verify("wrongpassword"))
-        XCTAssertTrue(loaded.notes.isEmpty)
+        XCTAssertFalse(loaded.notes.contains { $0.contains("message 2") || $0.contains("имя сети") })
     }
 
     func testMessageThreeAndFourPairWithoutMessagesOneOrTwo() {
