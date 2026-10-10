@@ -38,6 +38,12 @@ data class DictionaryUiState(
     val canSave: Boolean get() = editor.dirty && !editor.saving
 }
 
+/** Progress of a single remote dictionary download. */
+data class DownloadState(
+    val downloading: Boolean = false,
+    val progress: Float = 0f,
+)
+
 class DictionaryViewModel(
     application: Application,
     private val repository: DictionaryRepository,
@@ -46,6 +52,7 @@ class DictionaryViewModel(
 
     private val notifier = (application as HandHackApplication).notifier
     private val _editor = MutableStateFlow(EditorUiState())
+    private val _download = MutableStateFlow(DownloadState())
     private val _tab = MutableStateFlow(0)
     private var autoSaveJob: Job? = null
 
@@ -53,6 +60,8 @@ class DictionaryViewModel(
     private var autoSaveEnabled = true
 
     val editorState: StateFlow<EditorUiState> = _editor.asStateFlow()
+
+    val downloadState: StateFlow<DownloadState> = _download.asStateFlow()
 
     val uiState: StateFlow<DictionaryUiState> =
         combine(repository.state, _editor, _tab) { dictionary, editor, tab ->
@@ -192,6 +201,36 @@ class DictionaryViewModel(
             _editor.update {
                 it.copy(lines = entries, savedLines = entries, message = "Словарь восстановлен из special.txt")
             }
+        }
+    }
+
+    /**
+     * Fetches the catalogue's remote list into the working copy, mirroring the iOS
+     * «Скачать с GitHub» flow. On success the working copy becomes a downloaded file.
+     */
+    fun downloadFromGitHub() {
+        if (_download.value.downloading) return
+        viewModelScope.launch {
+            _download.value = DownloadState(downloading = true)
+            repository.downloadRemote(DictionaryRepository.REMOTE_SPECIAL_URL) { progress ->
+                _download.value = DownloadState(downloading = true, progress = progress)
+            }
+                .onSuccess { state ->
+                    _download.value = DownloadState(downloading = false)
+                    _editor.update {
+                        it.copy(
+                            lines = state.entries,
+                            savedLines = state.entries,
+                            message = "Скачано записей: ${state.entryCount}",
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    _download.value = DownloadState(downloading = false)
+                    _editor.update {
+                        it.copy(message = error.message ?: "Не удалось скачать словарь")
+                    }
+                }
         }
     }
 

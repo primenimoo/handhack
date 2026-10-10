@@ -12,6 +12,9 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
+import java.net.HttpURLConnection
+import java.net.URL
 
 data class DictionaryState(
     val entries: List<String> = emptyList(),
@@ -110,7 +113,7 @@ class DictionaryRepository(
         reload()
     }
 
-    suspend fun importFrom(uri: Uri): Result<DictionaryState> = withContext(Dispatchers.IO) {
+suspend fun importFrom(uri: Uri): Result<DictionaryState> = withContext(Dispatchers.IO) {
         runCatching {
             val entries = ArrayList<String>()
             FileAccess.openInput(context, uri).use { input ->
@@ -119,6 +122,61 @@ class DictionaryRepository(
             }
             writeWorkingCopy(entries)
             reload().copy(isDefault = false, sourceLabel = "Импортированный файл")
+        }
+    }
+
+    /**
+     * Pulls a remote dictionary over HTTPS and replaces the working copy with it.
+     *
+     * The result behaves exactly like an imported file: the source label changes and the
+     * original asset stays untouched, so «Сброс» still restores it. Progress is reported to
+     * the caller so the UI can show something real for a large list.
+     */
+    suspend fun downloadRemote(
+        url: String,
+        onProgress: (Float) -> Unit = {},
+    ): Result<DictionaryState> = withContext(Dispatchers.IO) {
+        runCatching {
+            workingFile.parentFile?.mkdirs()
+            markerFile.delete()
+            val tmp = File(workingFile.parentFile, "$workingFileName.download")
+            val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+                setInstanceFollowRedirects(true)
+                connectTimeout = CONNECT_TIMEOUT_MS
+                readTimeout = READ_TIMEOUT_MS
+                setRequestProperty("User-Agent", "HandHack/1.0 (Android)")
+            }
+            try {
+                val code = connection.responseCode
+                if (code !in 200..299) {
+                    throw IOException("Сервер ответил кодом $code")
+                }
+                val total = connection.contentLengthLong
+                if (total > 0) onProgress(0f)
+                tmp.outputStream().buffered(FileAccess.BUFFER_SIZE).use { output ->
+                    connection.inputStream.buffered(FileAccess.BUFFER_SIZE).use { input ->
+                        val buffer = ByteArray(FileAccess.BUFFER_SIZE)
+                        var received = 0L
+                        while (true) {
+                            val read = input.read(buffer)
+                            if (read <= 0) break
+                            output.write(buffer, 0, read)
+                            received += read
+                            if (total > 0) onProgress(received.toFloat() / total.toFloat())
+                        }
+                        output.flush()
+                    }
+                }
+                if (tmp.length() == 0L) throw IOException("Скачанный файл пуст")
+                if (!tmp.renameTo(workingFile)) {
+                    tmp.copyTo(workingFile, overwrite = true)
+                    tmp.delete()
+                }
+            } finally {
+                tmp.takeIf { it.exists() }?.delete()
+                connection.disconnect()
+            }
+            reload().copy(isDefault = false, sourceLabel = "Скачанный файл")
         }
     }
 
@@ -223,9 +281,17 @@ class DictionaryRepository(
         }
     }
 
-    companion object {
+companion object {
         const val DEFAULT_ASSET = "raw/special.txt"
         const val ASSET_SOURCE = "raw/special.txt"
         const val DEFAULT_WORKING_NAME = "special.txt"
+
+        /** The single remote list shipped in the catalogue, served from this repository. */
+        const val REMOTE_SPECIAL_URL =
+            "https://raw.githubusercontent.com/primenimoo/handhack/main/dictionaries/special.txt"
+
+        /** Hangs less: a dictionary feed should be small, so give it bounded time to start. */
+        private const val CONNECT_TIMEOUT_MS = 10_000
+        private const val READ_TIMEOUT_MS = 15_000
     }
 }

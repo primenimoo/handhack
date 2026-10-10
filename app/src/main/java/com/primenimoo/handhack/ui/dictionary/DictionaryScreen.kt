@@ -22,6 +22,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.Download
@@ -88,6 +89,7 @@ fun DictionaryScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val editor by viewModel.editorState.collectAsStateWithLifecycle()
+    val download by viewModel.downloadState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbarHost = remember { SnackbarHostState() }
     val haptics = rememberHaptics()
@@ -198,6 +200,26 @@ var editorOpen by rememberSaveable { mutableStateOf(false) }
                     Icon(Icons.Rounded.Restore, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("Сброс")
+                }
+            }
+
+            OutlinedButton(
+                onClick = viewModel::downloadFromGitHub,
+                enabled = !download.downloading,
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.large,
+            ) {
+                if (download.downloading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text("Скачивание…")
+                } else {
+                    Icon(Icons.Rounded.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Скачать с GitHub")
                 }
             }
 
