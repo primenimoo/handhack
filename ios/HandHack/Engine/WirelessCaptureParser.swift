@@ -188,7 +188,6 @@ enum WirelessCaptureParser {
     ) {
         let present = Array(Set(messages.map { $0.number })).sorted()
         let hasSupplicantNonce = present.contains(EapolKey.message2) || present.contains(EapolKey.message4)
-        let named = { notes.contains { $0.contains("имя сети") } }
 
         if messageOnesWithPmkid == 0 && !hasSupplicantNonce {
             notes.append("В capture нет EAPOL-Key message 2 — проверить пароль не по чему. " +
@@ -199,7 +198,7 @@ enum WirelessCaptureParser {
             notes.append("Есть сообщение с MIC, но нет обоих nonce (message 1/3 и 2/4) — " +
                 "без них нельзя построить PTK.")
         }
-        if missingSsid > 0 && !named() {
+        if missingSsid > 0 && !notes.contains(where: { $0.contains("имя сети") }) {
             notes.append("Не найдено имя сети для BSSID — в capture нет beacon или probe frames " +
                 "с этим адресом, а имя сети обязательно для PBKDF2.")
         }
