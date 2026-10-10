@@ -30,7 +30,7 @@ extension View {
     }
 }
 
-/// The app mark: a rounded badge with the two-colour gradient.
+/// The app mark: a rounded badge with the two-colour gradient behind the real logo artwork.
 struct AppBadge: View {
     var size: CGFloat = 64
 
@@ -39,8 +39,28 @@ struct AppBadge: View {
             .fill(AppTheme.gradient)
             .frame(width: size, height: size)
             .overlay(
-                Image(systemName: "wand.and.stars")
-                    .font(.system(size: size * 0.5, weight: .semibold))
-                    .foregroundStyle(.white))
+                Image("Logo")
+                    .resizable()
+                    .scaledToFit()
+                    .padding(size * 0.12))
+            .clipShape(RoundedRectangle(cornerRadius: size * 0.24, style: .continuous))
+    }
+}
+
+extension View {
+    /// Puts the app logo in the centre of a screen's navigation bar, the way the brand is shown
+    /// at the top of the app.
+    func brandToolbar(height: CGFloat = 26) -> some View {
+        self
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Image("Logo")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(height: height)
+                        .accessibilityLabel("HandHack")
+                }
+            }
     }
 }

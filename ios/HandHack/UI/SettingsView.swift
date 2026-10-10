@@ -39,6 +39,7 @@ struct SettingsView: View {
             }
             .navigationTitle("Настройки")
             .supportToolbar()
+            .brandToolbar()
         }
     }
 

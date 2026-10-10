@@ -26,6 +26,7 @@ struct AttackView: View {
                 }
             }
             .supportToolbar()
+            .brandToolbar()
             .fileImporter(
                 isPresented: $importing,
                 allowedContentTypes: [.item],

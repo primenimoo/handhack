@@ -25,6 +25,7 @@ struct DictionaryView: View {
                 }
             }
             .supportToolbar()
+            .brandToolbar()
             .onAppear { reload() }
             .fileImporter(
                 isPresented: $importing,

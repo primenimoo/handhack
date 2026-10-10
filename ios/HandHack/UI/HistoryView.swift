@@ -30,6 +30,7 @@ struct HistoryView: View {
                 Button("Отмена", role: .cancel) {}
             }
             .supportToolbar()
+            .brandToolbar()
         }
     }
 

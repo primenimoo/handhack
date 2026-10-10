@@ -313,6 +313,50 @@ final class CaptureFormatTests: XCTestCase {
         XCTAssertEqual(attempts, 3) // two derivations for line 1, one match for line 2's network
     }
 
+    // MARK: a real-world QoS pcap, end to end
+
+    /// A handshake captured on a live channel (QoS data frames, 802.1X over SNAP) in which the
+    /// passphrase is only recoverable by success, plus its dictionary. Loading and cracking it
+    /// exercises the QoS-data parsing path and proves the found line survives the whole pipeline.
+    func testRealWorldQosPcapCracksEndToEnd() {
+        let loaded = CaptureLoader.load(
+            data: Array(Data(base64Encoded: demoPcapBase64)!), name: "demo-capture.pcap")
+        XCTAssertEqual(loaded.format, .pcap)
+        XCTAssertEqual(loaded.targets.count, 1)
+        XCTAssertEqual(loaded.targets[0].ssid, "HandHackDemo")
+        XCTAssertEqual(loaded.targets[0].evidence, .eapolMic)
+        XCTAssertFalse(loaded.targets[0].verify("wrongpass"))
+
+        let dictionary = Array(demoDictionary.joined(separator: "\n").utf8)
+        let outcome = AnalysisEngine().crack(targets: loaded.targets, dictionaryBytes: dictionary)
+        guard case .found(let password, let ssid, let attempts) = outcome else {
+            return XCTFail("engine did not recover the password: \(outcome)")
+        }
+        XCTAssertEqual(password, "demo-pass-123") // found exactly, not a neighbour line
+        XCTAssertEqual(ssid, "HandHackDemo")
+        XCTAssertEqual(attempts, 41) // forty misses then one derivation that matches
+    }
+
+    /// The 928-byte capture the demo handshake was written into. Built by ../../demo-capture.pcap
+    /// from the same key schedule and frozen here so the test is self-contained.
+    private var demoPcapBase64: String {
+        "1MOyoQIABAAAAAAAAAAAAAAABABpAAAAAPFTZSChBwAyAAAAMgAAAIAAAAD///////8qXZPEZ7EqXZPEZ7EAAAAAAAAAAAAAAAAAAAAMSGFuZEhhY2tEZW1vAfFTZSChBwCFAAAAhQAAAIgCAACgmH1V4gEqXZPEZ7EqXZPEZ7EAAAAAqqoDAAAAiI4BAwBfAgCKAAAAAAAAAAAAARESExQVFhcYGRobHB0eHyAhIiMkJSYnKCkqKywtLi8wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAC8VNlIKEHAIUAAACFAAAAiAIAACpdk8RnsaCYfVXiASpdk8RnsQAAAACqqgMAAACIjgEDAF8CAQoAAAAAAAAAAAABQUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVpbXF1eX2AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJJuRFDED6oYVSpNDgyU9uIAAAPxU2UgoQcAhQAAAIUAAACIAgAAoJh9VeIBKl2TxGexKl2TxGexAAAAAKqqAwAAAIiOAQMAXwITygAAAAAAAAAAAAIREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4vMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAeZ9CU15sVR2bKi9VgaLnPAAABPFTZSChBwCFAAAAhQAAAIgCAAAqXZPEZ7GgmH1V4gEqXZPEZ7EAAAAAqqoDAAAAiI4BAwBfAgMKAAAAAAAAAAAAAkFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaW1xdXl9gAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACWGpDO5jXoL0IJjWFdtSlXAAA="
+    }
+
+    /// The dictionary shipped with the demo capture: forty valid WPA passphrases that are wrong,
+    /// then the real one on line 41.
+    private var demoDictionary: [String] {
+        [
+            "sunshine", "letmein7", "dragonfly", "monkey77", "football2", "charlie3",
+            "whatever", "trustno1", "starwars", "iloveyou", "88888888", "master12",
+            "qwerty12", "passw0rd", "zaq12wsx", "asdfghjk", "qazwsxed", "1qaz2wsx",
+            "password", "admin888", "baseball", "freedom1", "shadow99", "welcome1",
+            "mustang1", "ninja123", "princess", "diamond1", "loveme12", "michael1",
+            "hannah11", "summer99", "pepper12", "banana11", "ginger12", "cookie12",
+            "bailey12", "cooper12", "soccer12", "hockey12", "demo-pass-123",
+        ]
+    }
+
     // MARK: fixtures
 
     private func micTarget() -> HandshakeTarget {
