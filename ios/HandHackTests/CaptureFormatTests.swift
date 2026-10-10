@@ -1,9 +1,10 @@
 import XCTest
 @testable import HandHack
 
-/// Ports the Android capture/crypto regression suite: the key schedule is checked against
-/// vectors this project did not produce, then one synthetic handshake is written into every
-/// supported container and read back.
+/// Ports the Android capture/crypto regression suite: PBKDF2 is checked against the vector the
+/// standard publishes, the PTK expansion against the IEEE 802.11i PRF construction that hostap
+/// implements, then one synthetic handshake is written into every supported container and read
+/// back.
 final class CaptureFormatTests: XCTestCase {
 
     private let ssid = "HandHackLab"
@@ -21,7 +22,7 @@ final class CaptureFormatTests: XCTestCase {
 
     private var pmk: [UInt8] { Hex.decode("031cc89c376d8b215ccaff9a24b3849740ba2774bb58d128a7d29722999d7724")! }
     private var pmkid: [UInt8] { Hex.decode("34445a8ed3d4a876d2dc0586867c3d2d")! }
-    private var keyConfirmationKey: [UInt8] { Hex.decode("53cc8933ef579773792e261c80bda167")! }
+    private var keyConfirmationKey: [UInt8] { Hex.decode("c6b80069d7eb00720c147f2be08dab35")! }
 
     // MARK: key schedule against external vectors
 

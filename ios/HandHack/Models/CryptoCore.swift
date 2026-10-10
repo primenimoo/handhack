@@ -119,16 +119,23 @@ enum Prf {
     }
 
     /// 512 bits of label-seeded output. WPA/TKIP uses HMAC-MD5, WPA2/CCMP HMAC-SHA1.
+    ///
+    /// IEEE 802.11i defines this PRF as `HMAC(K, label || 0x00 || seed || counter)` for
+    /// `counter = 0, 1, 2, …`, where the label is followed by a single zero octet and the counter
+    /// is a single octet appended after the seed. This is the construction hostap and aircrack-ng
+    /// implement, and it is what the MIC of a real handshake depends on; the older `A(i)` chain
+    /// this code once used produced a different PTK and never matched a captured message.
     static func derive(pmk: [UInt8], label: [UInt8], seed: [UInt8], keyDescriptorType: Int) -> [UInt8] {
         var output = [UInt8]()
         output.reserveCapacity(64)
-        var block = label
+        var counter: UInt8 = 0
         while output.count < 64 {
-            block = hash(pmk: pmk, block, keyDescriptorType)
-            var toHash = block
-            toHash.append(contentsOf: seed)
-            let chunk = hash(pmk: pmk, toHash, keyDescriptorType)
+            var data = label
+            data.append(contentsOf: seed)
+            data.append(counter)
+            let chunk = hash(pmk: pmk, data, keyDescriptorType)
             output.append(contentsOf: chunk.prefix(64 - output.count))
+            counter = counter &+ 1
         }
         return output
     }
