@@ -25,9 +25,33 @@
   это Xcode 26, 2025 год).
 - Свободный или платный Apple ID для подписи.
 
-Сборка `.ipa` возможна **только на macOS** — этого требует Xcode и связка подписи.
+Сборка `.ipa` компилятором возможна **только на macOS** — этого требует Xcode. Но если Mac нет,
+проект собирается в облаке на бесплатном macOS-раннере GitHub (см. ниже).
 
-## Сборка и тесты
+## Сборка без Mac (GitHub Actions)
+
+В репозитории уже лежит готовый workflow `.github/workflows/build-ios.yml`. Он собирает
+**неподписанный** `.ipa` на macOS-раннере GitHub — Apple ID и секреты не нужны, подпись делаете
+вы локально в Sideloadly/AltStore.
+
+1. Создайте пустой репозиторий на GitHub (например, `handhack`).
+2. В корне проекта привяжите remote и запушьте:
+
+   ```sh
+   git remote add origin https://github.com/ВАШ_ЛОГИН/handhack.git
+   git push -u origin main
+   ```
+
+3. На GitHub откройте вкладку **Actions** → workflow **Build iOS IPA**. Сборка запустится сама
+   (либо нажмите **Run workflow**).
+4. Дождитесь зелёной галочки и скачайте артефакт **HandHack-unsigned-ipa** (внутри
+   `HandHack-unsigned.ipa`).
+5. Подпишите `.ipa` через Sideloadly/AltStore (раздел «Подпись и установка» ниже).
+
+Для эффекта Liquid Glass раннер должен иметь Xcode 26 (iOS 26 SDK); workflow автоматически
+выбирает самую новую установленную версию Xcode.
+
+## Сборка и тесты (на Mac)
 
 Откройте `HandHack.xcodeproj`, выберите схему **HandHack**.
 
