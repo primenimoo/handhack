@@ -3,11 +3,13 @@ import UIKit
 
 struct CaptureDetailView: View {
     @EnvironmentObject private var app: AppState
+    @Environment(\.dismiss) private var dismiss
     let capture: CaptureRecord
 
     @State private var targets: [HandshakeTarget] = []
     @State private var loading = true
     @State private var exportFile: URL?
+    @State private var confirmDelete = false
 
     var body: some View {
         List {
@@ -52,6 +54,24 @@ struct CaptureDetailView: View {
         }
         .navigationTitle(capture.ssids.first ?? "Запись")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(role: .destructive) { confirmDelete = true } label: {
+                    Image(systemName: "trash")
+                }
+                .tint(.red)
+                .accessibilityLabel("Удалить запись")
+            }
+        }
+        .confirmationDialog("Удалить эту запись?", isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("Удалить", role: .destructive) {
+                app.deleteCapture(capture)
+                dismiss()
+            }
+            Button("Отмена", role: .cancel) {}
+        } message: {
+            Text("Файл записи будет удалён без возможности восстановления.")
+        }
         .supportToolbar()
         .onAppear(perform: load)
     }

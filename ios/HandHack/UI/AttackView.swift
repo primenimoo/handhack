@@ -18,6 +18,11 @@ struct AttackView: View {
             }
             .navigationTitle("Подбор")
             .toolbar {
+                if !app.captures.isEmpty {
+                    ToolbarItem(placement: .topBarLeading) {
+                        EditButton()
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { importing = true } label: {
                         Image(systemName: "plus")
@@ -49,6 +54,13 @@ struct AttackView: View {
                         CaptureDetailView(capture: capture)
                     } label: {
                         CaptureRow(capture: capture)
+                    }
+                    .contextMenu {
+                        Button(role: .destructive) {
+                            app.deleteCapture(capture)
+                        } label: {
+                            Label("Удалить запись", systemImage: "trash")
+                        }
                     }
                 }
                 .onDelete { offsets in

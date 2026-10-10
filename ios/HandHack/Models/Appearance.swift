@@ -78,7 +78,7 @@ enum SuccessSoundChoice: String, CaseIterable, Codable, Identifiable {
 
     var title: String {
         switch self {
-        case .original: return "Твой звук (mp3)"
+        case .original: return "Пианино"
         case .chime: return "Колокольчик"
         case .pop: return "Поп"
         case .sparkle: return "Искры"
