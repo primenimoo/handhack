@@ -25,8 +25,9 @@ final class AppState: ObservableObject {
     // MARK: Captures
 
     @discardableResult
-    func importCapture(data: [UInt8], name: String) -> CaptureRecord {
-        let record = CaptureRecord(data: data, name: name)
+    func importCapture(data: [UInt8], name: String,
+                       loaded: CaptureLoader.Loaded? = nil) -> CaptureRecord {
+        let record = CaptureRecord(data: data, name: name, loaded: loaded)
         record.persisted(data: data)
         if let index = captures.firstIndex(where: { $0.fileName == record.fileName }) {
             captures[index] = record

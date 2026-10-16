@@ -2,6 +2,8 @@ import SwiftUI
 
 struct RootView: View {
     @EnvironmentObject private var app: AppState
+    @StateObject private var updates = DictionaryDownloader()
+    @State private var showUpdatePrompt = false
 
     var body: some View {
         TabView {
@@ -23,6 +25,21 @@ struct RootView: View {
             get: { app.settings.firstLaunch },
             set: { _ in app.setFirstLaunch(false) })) {
             OnboardingView()
+        }
+        .task(id: app.settings.firstLaunch) {
+            guard !app.settings.firstLaunch else { return }
+            await updates.refreshCatalogue()
+            showUpdatePrompt = !updates.actionable.isEmpty
+        }
+        .alert("Обновить базы данных?", isPresented: $showUpdatePrompt) {
+            Button("Обновить") {
+                Task { await updates.installAll(updates.actionable) }
+            }
+            Button("Позже", role: .cancel) {}
+        } message: {
+            Text(updates.actionable.count == 1
+                 ? "Доступна 1 новая или обновлённая база данных."
+                 : "Доступно обновлений: \(updates.actionable.count).")
         }
     }
 }

@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "updated": "2026-10-11",
+  "databases": [
+    {
+      "id": "special",
+      "title": "Special",
+      "detail": "Частые пароли (базовый список)",
+      "file": "special.txt",
+      "lines": 13846,
+      "bytes": 141693,
+      "sha256": "777bd10eef0f4d71745c3e64aaec0db57c5b781cad4a71590222a6b6881261c5",
+      "version": 1,
+      "recommended": true
+    },
+    {
+      "id": "wifi-common",
+      "title": "Wi-Fi частые",
+      "detail": "Популярные пароли домашних и гостевых сетей",
+      "file": "wifi-common.txt",
+      "lines": 785,
+      "bytes": 8364,
+      "sha256": "0fb6cafdd424d7d58a7b1bc84ffcdbbfe90dbb0d84a7198cb130f484bc572519",
+      "version": 1,
+      "recommended": true
+    },
+    {
+      "id": "routers-default",
+      "title": "Роутеры по умолчанию",
+      "detail": "Заводские пароли роутеров и точек доступа",
+      "file": "routers-default.txt",
+      "lines": 549,
+      "bytes": 6282,
+      "sha256": "1456e117769a66e16a2b5624f7452696e50b5f05d473b1faede0499e8231acb0",
+      "version": 1,
+      "recommended": true
+    },
+    {
+      "id": "numeric-8",
+      "title": "8-значные числа",
+      "detail": "Повторы, последовательности и даты рождения",
+      "file": "numeric-8.txt",
+      "lines": 10987,
+      "bytes": 98883,
+      "sha256": "868c085bb929dc7c404762518eaa72b6eff5bd25e8a03c5efb38d2f4ed2ac838",
+      "version": 1,
+      "recommended": true
+    },
+    {
+      "id": "names-years",
+      "title": "Имена и годы",
+      "detail": "Имена с годами и хвостами (RU/EN)",
+      "file": "names-years.txt",
+      "lines": 4516,
+      "bytes": 48188,
+      "sha256": "ff8e7bced7f7ec99e2ed4cfb1643f7dfb481cd1e586a18ca2b6378b3476274a1",
+      "version": 1,
+      "recommended": true
+    },
+    {
+      "id": "keyboard",
+      "title": "Клавиатурные",
+      "detail": "Прогулки по клавиатуре QWERTY и цифрам",
+      "file": "keyboard.txt",
+      "lines": 1260,
+      "bytes": 12955,
+      "sha256": "ce2f68cb575fcd51ff516aa67af46dc8cde8059c551d6b8c67be75bb5d734400",
+      "version": 1,
+      "recommended": true
+    }
+  ]
+}

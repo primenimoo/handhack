@@ -16,9 +16,12 @@ final class AnalysisEngine {
         let attempts: Int
         let currentWord: String
         /// Attempts per second averaged over the whole run so far.
-        let peekRate: Double
+        let averageRate: Double
+        /// Attempts per second over the most recent sampling window.
+        let currentRate: Double
         let processedLines: Int
         let totalLines: Int
+        let elapsedSeconds: Double
     }
 
     enum Outcome {
@@ -53,6 +56,11 @@ final class AnalysisEngine {
     private var job: Job?
     private(set) var isRunning = false
 
+    /// A condition gate for cooperative pause. Kept separate from the job so a paused worker can
+    /// be released the instant the user resumes, without touching cancellation.
+    private let pauseCondition = NSCondition()
+    private var paused = false
+
     func start(
         targets: [HandshakeTarget],
         dictionaryBytes: [UInt8],
@@ -65,6 +73,7 @@ final class AnalysisEngine {
         let thisJob = Job()
         job = thisJob
         isRunning = true
+        setPaused(false)
 
         queue.async { [weak self] in
             guard let self else { return }
@@ -85,7 +94,35 @@ final class AnalysisEngine {
     }
 
     func stop() {
+        setPaused(false)
         job?.cancel()
+    }
+
+    /// Pauses the running search at the next loop boundary. The elapsed clock excludes the time
+    /// spent paused, so the reported rate never dips just because the user paused the run.
+    func pause() {
+        setPaused(true)
+    }
+
+    func resume() {
+        setPaused(false)
+    }
+
+    private func setPaused(_ value: Bool) {
+        pauseCondition.lock()
+        paused = value
+        if !value { pauseCondition.broadcast() }
+        pauseCondition.unlock()
+    }
+
+    /// Blocks while paused. Returns `false` if the run was cancelled while waiting.
+    private func waitWhilePaused(_ job: Job) -> Bool {
+        pauseCondition.lock()
+        defer { pauseCondition.unlock() }
+        while paused && !job.cancelled {
+            pauseCondition.wait(until: Date().addingTimeInterval(0.05))
+        }
+        return !job.cancelled
     }
 
     /// Synchronous run used by the tests: it exercises the exact same loop as [start] with no
@@ -127,16 +164,29 @@ final class AnalysisEngine {
         }
 
         var attempts = 0
+        var pausedSeconds = 0.0
         let started = ProcessInfo.processInfo.systemUptime
         let total = lines.count
+        var meter = RateMeter(startTime: started)
+
+        func effectiveNow() -> Double {
+            ProcessInfo.processInfo.systemUptime - pausedSeconds
+        }
 
         for (lineIndex, line) in lines.enumerated() {
+            // Pause first, and remember how long we waited so the clock can discount it.
+            let waitStarted = ProcessInfo.processInfo.systemUptime
+            if !waitWhilePaused(job) {
+                return .stopped(attempts: attempts)
+            }
+            pausedSeconds += ProcessInfo.processInfo.systemUptime - waitStarted
+
             if job.cancelled {
                 return .stopped(attempts: attempts)
             }
 
             if let cap = maxAttemptsPerSecond, attempts > 40, lineIndex % 12 == 0 {
-                let elapsed = max(ProcessInfo.processInfo.systemUptime - started, 0.001)
+                let elapsed = max(effectiveNow() - started, 0.001)
                 let currentRate = Double(attempts) / elapsed
                 if currentRate > cap {
                     // Pause just long enough to pull the running average back under the cap; the
@@ -146,8 +196,8 @@ final class AnalysisEngine {
                 }
             }
 
-            let candidateBytes = Array(line)
-            let candidate = String(decoding: candidateBytes, as: UTF8.self)
+            let candidateBytes = Array(line.utf8)
+            let candidate = line
 
             if candidateBytes.count >= HandshakeTarget.wpaMinPassphrase &&
                 candidateBytes.count <= HandshakeTarget.wpaMaxPassphrase {
@@ -162,13 +212,16 @@ final class AnalysisEngine {
             }
 
             if lineIndex % 25 == 0 || lineIndex == total - 1 {
-                let elapsed = max(ProcessInfo.processInfo.systemUptime - started, 0.001)
+                let now = effectiveNow()
+                meter.sample(attempts: attempts, now: now)
                 onProgress(Progress(
                     attempts: attempts,
                     currentWord: candidate.isEmpty ? "(пусто)" : candidate,
-                    peekRate: Double(attempts) / elapsed,
+                    averageRate: meter.average,
+                    currentRate: meter.current,
                     processedLines: lineIndex + 1,
-                    totalLines: total))
+                    totalLines: total,
+                    elapsedSeconds: max(now - started, 0)))
             }
         }
 
@@ -176,24 +229,43 @@ final class AnalysisEngine {
     }
 }
 
-/// Splits a dictionary file into candidate lines, honouring both Unix and Windows endings.
+/// Turns monotonic timestamps into an average and a windowed rate without ever dividing by a
+/// measuring window so small that a single tick looks like a million attempts per second.
+struct RateMeter {
+    /// A fresh instantaneous rate is only published once this much time has passed, so the number
+    /// on screen is always rooted in a real interval rather than a sub-millisecond blip.
+    static let window: Double = 0.25
+
+    private let start: Double
+    private var lastTime: Double
+    private var lastAttempts = 0
+    private(set) var average = 0.0
+    private(set) var current = 0.0
+
+    init(startTime: Double) {
+        start = startTime
+        lastTime = startTime
+    }
+
+    mutating func sample(attempts: Int, now: Double) {
+        let elapsed = now - start
+        average = elapsed > 0 ? Double(attempts) / elapsed : 0
+
+        let delta = now - lastTime
+        if delta >= Self.window {
+            current = Double(attempts - lastAttempts) / delta
+            lastTime = now
+            lastAttempts = attempts
+        } else if attempts == 0 {
+            current = 0
+        }
+    }
+}
+
+/// Splits a dictionary file into candidate lines, honouring both Unix and Windows endings and
+/// dropping a leading byte-order mark so the first password is never polluted by it.
 enum DictionaryLines {
-    static func split(_ bytes: [UInt8]) -> [ArraySlice<UInt8>] {
-        var lines: [ArraySlice<UInt8>] = []
-        var start = 0
-        for i in 0..<bytes.count where bytes[i] == 0x0A {
-            if i > start {
-                var slice = bytes[start..<i]
-                if slice.last == 0x0D { slice = slice.dropLast() }
-                if !slice.isEmpty { lines.append(slice) }
-            }
-            start = i + 1
-        }
-        if start < bytes.count {
-            var slice = bytes[start...]
-            if slice.last == 0x0D { slice = slice.dropLast() }
-            if !slice.isEmpty { lines.append(slice) }
-        }
-        return lines
+    static func split(_ bytes: [UInt8]) -> [String] {
+        DictionaryText.candidates(bytes)
     }
 }

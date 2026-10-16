@@ -137,9 +137,9 @@ enum WirelessCaptureParser {
 
         var micWithoutNonces = 0
         for group in groups.values {
-            let authenticatorNonce = group
-                .first { ($0.number == EapolKey.message1 || $0.number == EapolKey.message3) && !isZeroNonce($0.frame) }
-                .map { EapolKey.nonce($0.frame) }
+            let authenticatorMessages = group.filter {
+                ($0.number == EapolKey.message1 || $0.number == EapolKey.message3) && !isZeroNonce($0.frame)
+            }
             let supplicantNonce = group
                 .first { ($0.number == EapolKey.message2 || $0.number == EapolKey.message4) && !isZeroNonce($0.frame) }
                 .map { EapolKey.nonce($0.frame) }
@@ -147,6 +147,19 @@ enum WirelessCaptureParser {
                 $0.hasMic && ($0.number == EapolKey.message2 || $0.number == EapolKey.message3 || $0.number == EapolKey.message4)
             }
             guard let micMessage = carried else { continue }
+
+            // A genuine four-way handshake repeats the access point's nonce in message 1 and
+            // message 3. When the two differ, these frames cannot belong to one handshake: the
+            // file was assembled or damaged rather than sniffed, so no passphrase can reproduce its
+            // MIC — hashcat would fail on it too. Say that instead of quietly reporting "not found".
+            if let mismatch = differingAuthenticatorNonces(authenticatorMessages) {
+                let note = "Кадры M1 и M3 несут разные ANonce (\(mismatch.0) и \(mismatch.1)) — " +
+                    "это не одно четырёхстороннее рукопожатие, а повреждённый или собранный вручную " +
+                    "файл. Проверить пароль по нему нельзя: MIC не совпадёт ни с одним паролем."
+                if !notes.contains(note) { notes.append(note) }
+                continue
+            }
+            let authenticatorNonce = authenticatorMessages.first.map { EapolKey.nonce($0.frame) }
             guard let authenticatorNonce, let supplicantNonce else {
                 micWithoutNonces += 1
                 continue
@@ -206,6 +219,18 @@ enum WirelessCaptureParser {
 
     private static func isZeroNonce(_ frame: [UInt8]) -> Bool {
         EapolKey.nonce(frame).allSatisfy { $0 == 0 }
+    }
+
+    /// The two hex nonces when message 1 and message 3 disagree on the access point's nonce.
+    /// A real handshake reuses one ANonce in both messages, so a disagreement means the capture
+    /// is not a single, genuine four-way handshake.
+    private static func differingAuthenticatorNonces(_ messages: [Message]) -> (String, String)? {
+        guard let one = messages.first(where: { $0.number == EapolKey.message1 }),
+              let three = messages.first(where: { $0.number == EapolKey.message3 }) else { return nil }
+        let first = EapolKey.nonce(one.frame)
+        let second = EapolKey.nonce(three.frame)
+        guard first != second else { return nil }
+        return (Hex.encode(first), Hex.encode(second))
     }
 
     /// Works out which address is the access point: a beacon settles it outright, otherwise the

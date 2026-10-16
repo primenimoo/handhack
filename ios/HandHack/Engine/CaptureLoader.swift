@@ -66,8 +66,53 @@ enum CaptureLoader {
         let format: CaptureFormat
         /// Plain sentences for the UI, already written in Russian.
         let notes: [String]
+        /// What the bytes turned out to be, including the two cases the old code could not tell
+        /// apart: a file that is not a recognised format at all, and one that is a known format
+        /// but has no usable records in it.
+        var recognition: Recognition = .unknown
 
         var isUsable: Bool { !targets.isEmpty }
+    }
+
+    /// The four outcomes of looking at a file, kept separate so a message can say "this is not a
+    /// capture we support" instead of quietly pretending it was `hc22000` and reporting damage.
+    enum Recognition: Equatable, Codable {
+        case empty
+        case unknown
+        /// A recognised container/text format with no usable records.
+        case damaged(CaptureFormat)
+        case recognised(CaptureFormat)
+
+        var format: CaptureFormat? {
+            switch self {
+            case .damaged(let format), .recognised(let format): return format
+            case .empty, .unknown: return nil
+            }
+        }
+    }
+
+    /// The verdict handed back after an import attempt, phrased for the user and carrying every
+    /// stage so the UI can say exactly where a file stopped being useful.
+    struct ImportReport {
+        let fileName: String
+        let recognition: Recognition
+        let targetCount: Int
+        let notes: [String]
+
+        var isUsable: Bool { targetCount > 0 }
+
+        var statusLine: String {
+            switch recognition {
+            case .empty:
+                return "«\(fileName)»: файл пустой."
+            case .unknown:
+                return "«\(fileName)»: формат не распознан."
+            case .damaged(let format):
+                return "«\(fileName)»: файл похож на \(format.label), но пригодных записей нет."
+            case .recognised(let format):
+                return "«\(fileName)»: \(format.label), сетей для проверки: \(targetCount)."
+            }
+        }
     }
 
     private static let probeBytes = 4096
@@ -75,18 +120,41 @@ enum CaptureLoader {
 
     static func load(data: [UInt8], name: String) -> Loaded {
         if data.isEmpty {
-            return Loaded(targets: [], format: .hc22000,
-                          notes: ["Файл пустой — нет данных для подбора."])
+            return Loaded(targets: [], format: .hc22000, notes: ["Файл пустой — нет данных для подбора."],
+                          recognition: .empty)
         }
 
         let probe = Array(data.prefix(probeBytes))
-        switch detect(probe: probe, fileName: name) {
-        case .hc22000: return loadText(data: data)
-        case .legacyExport: return loadLegacy(data: data)
-        case .hccapx: return loadContainer(format: .hccapx, targets: HccapxReader.parse(data: data), size: data.count)
-        case .hccap: return loadContainer(format: .hccap, targets: HccapReader.parse(data: data), size: data.count)
-        case .pcap, .pcapng: return loadFrames(data: data, format: detect(probe: probe, fileName: name))
+        guard let format = sniff(probe: probe, fileName: name) else {
+            return Loaded(
+                targets: [], format: .hc22000,
+                notes: ["Формат не распознан. Поддерживаются: hc22000 (WPA*01 / WPA*02), " +
+                    "экспорт HandHack, hccapx, hccap, pcap и pcapng."],
+                recognition: .unknown)
         }
+
+        let loaded: Loaded
+        switch format {
+        case .hc22000: loaded = loadText(data: data)
+        case .legacyExport: loaded = loadLegacy(data: data)
+        case .hccapx: loaded = loadContainer(format: .hccapx, targets: HccapxReader.parse(data: data), size: data.count)
+        case .hccap: loaded = loadContainer(format: .hccap, targets: HccapReader.parse(data: data), size: data.count)
+        case .pcap, .pcapng: loaded = loadFrames(data: data, format: format)
+        }
+
+        let recognition: Recognition = loaded.targets.isEmpty ? .damaged(format) : .recognised(format)
+        return Loaded(targets: loaded.targets, format: format, notes: loaded.notes, recognition: recognition)
+    }
+
+    /// The user-facing verdict for one imported file. Built from the same load that the rest of
+    /// the app uses, so the message and the stored record can never disagree.
+    static func report(data: [UInt8], name: String) -> ImportReport {
+        report(load(data: data, name: name), name: name)
+    }
+
+    static func report(_ loaded: Loaded, name: String) -> ImportReport {
+        ImportReport(fileName: name, recognition: loaded.recognition,
+                     targetCount: loaded.targets.count, notes: loaded.notes)
     }
 
     static func load(url: URL) throws -> Loaded {
@@ -97,9 +165,10 @@ enum CaptureLoader {
     /// Decides the format from the bytes. The two text formats are told apart by whether a full
     /// nine-field `.hc22000` record is present anywhere; a bare `WPA*01`/`WPA*02` marker glued to
     /// one hex blob (the legacy export, whose SSID may sit on the line above) is the old format.
-    /// `.hccap` is recognised by its shape because the format has no magic number.
-    static func detect(probe: [UInt8], fileName: String = "") -> CaptureFormat {
-        if probe.isEmpty { return .hc22000 }
+    /// `.hccap` is recognised by its shape because the format has no magic number. Returns `nil`
+    /// when the bytes match nothing we support, so callers can tell "unknown" from "damaged".
+    static func sniff(probe: [UInt8], fileName: String = "") -> CaptureFormat? {
+        if probe.isEmpty { return nil }
 
         if PcapReader.isCaptureContainer(probe) {
             return PcapReader.detect(probe).kind == .pcapng ? .pcapng : .pcap
@@ -118,7 +187,13 @@ enum CaptureLoader {
                 sawLegacyMarker = true
             }
         }
-        return sawLegacyMarker ? .legacyExport : .hc22000
+        return sawLegacyMarker ? .legacyExport : nil
+    }
+
+    /// Kept for callers that still want a concrete format: falls back to `hc22000` when nothing
+    /// matched. New code should prefer `sniff`, which can say "unknown".
+    static func detect(probe: [UInt8], fileName: String = "") -> CaptureFormat {
+        sniff(probe: probe, fileName: fileName) ?? .hc22000
     }
 
     private static func loadText(data: [UInt8]) -> Loaded {

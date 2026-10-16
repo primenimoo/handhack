@@ -53,18 +53,45 @@ struct CaptureRecord: Identifiable, Codable, Equatable {
     var notes: [String]
     var ssids: [String]
     var addedAt: Date
+    /// What the file actually was when it was imported. Persisted so list rows can say "формат не
+    /// распознан" instead of showing the `hc22000` fallback the old detector used.
+    var recognition: CaptureLoader.Recognition
 
-    init(data: [UInt8], name: String) {
-        let loaded = CaptureLoader.load(data: data, name: name)
+    init(data: [UInt8], name: String, loaded: CaptureLoader.Loaded? = nil) {
+        self.init(name: name, loaded: loaded ?? CaptureLoader.load(data: data, name: name))
+    }
+
+    /// Builds the record from an already-parsed load, so importing a file parses it once instead
+    /// of once here and again in the caller.
+    init(name: String, loaded: CaptureLoader.Loaded) {
         id = UUID()
         fileName = AppFiles.sanitize(name)
         format = loaded.format
         notes = loaded.notes
         ssids = loaded.targets.map { $0.displaySsid }
         addedAt = Date()
+        recognition = loaded.recognition
         if (fileName as NSString).pathExtension.isEmpty {
             fileName = "\(fileName).\(format.id)"
         }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, fileName, format, notes, ssids, addedAt, recognition
+    }
+
+    /// Lenient decode: records saved before `recognition` existed fall back to a value derived
+    /// from what was stored rather than failing the whole state load.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        fileName = try container.decode(String.self, forKey: .fileName)
+        format = try container.decode(CaptureLoader.CaptureFormat.self, forKey: .format)
+        notes = try container.decodeIfPresent([String].self, forKey: .notes) ?? []
+        ssids = try container.decodeIfPresent([String].self, forKey: .ssids) ?? []
+        addedAt = try container.decodeIfPresent(Date.self, forKey: .addedAt) ?? Date()
+        recognition = try container.decodeIfPresent(CaptureLoader.Recognition.self, forKey: .recognition)
+            ?? (ssids.isEmpty ? .damaged(format) : .recognised(format))
     }
 
     var isUsable: Bool { !ssids.isEmpty }

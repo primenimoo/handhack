@@ -110,8 +110,8 @@ struct AttackView: View {
 
     private func importFiles(_ urls: [URL]) {
         DispatchQueue.global(qos: .userInitiated).async {
-            var imported = 0
-            var lastNotes: [String] = []
+            var statuses: [String] = []
+            var notes: [String] = []
             var failures: [String] = []
 
             for url in urls {
@@ -119,27 +119,24 @@ struct AttackView: View {
                 defer { if scoped { url.stopAccessingSecurityScopedResource() } }
                 do {
                     let data = Array(try Data(contentsOf: url))
-                    let record = CaptureLoader.load(data: data, name: url.lastPathComponent)
-                    lastNotes = record.notes
+                    // Parse once, then reuse the result for both the record and the message.
+                    let loaded = CaptureLoader.load(data: data, name: url.lastPathComponent)
+                    let report = CaptureLoader.report(loaded, name: url.lastPathComponent)
                     DispatchQueue.main.async {
-                        app.importCapture(data: data, name: url.lastPathComponent)
+                        app.importCapture(data: data, name: url.lastPathComponent, loaded: loaded)
                     }
-                    imported += 1
+                    statuses.append(report.statusLine)
+                    notes.append(contentsOf: report.notes)
                 } catch {
                     failures.append("\(url.lastPathComponent): \(error.localizedDescription)")
                 }
             }
 
             DispatchQueue.main.async {
-                if imported == 0 {
-                    message = failures.isEmpty
-                        ? "Не удалось прочитать выбранные файлы."
-                        : failures.joined(separator: "\n")
-                    showMessage = true
-                } else if !lastNotes.isEmpty {
-                    message = lastNotes.joined(separator: "\n")
-                    showMessage = true
-                }
+                var lines = statuses + notes + failures
+                if lines.isEmpty { lines = ["Не удалось прочитать выбранные файлы."] }
+                message = lines.joined(separator: "\n")
+                showMessage = true
             }
         }
     }
@@ -167,9 +164,18 @@ private struct CaptureRow: View {
     }
 
     private var subtitle: String {
-        if capture.ssids.isEmpty {
-            return "\(capture.format.label) · нет проверяемых сетей"
+        switch capture.recognition {
+        case .empty:
+            return "файл пустой"
+        case .unknown:
+            return "формат не распознан"
+        case .damaged(let format):
+            return "\(format.label) · пригодных записей нет"
+        case .recognised(let format):
+            if capture.ssids.isEmpty {
+                return "\(format.label) · нет проверяемых сетей"
+            }
+            return "\(capture.ssids.joined(separator: ", ")) · \(capture.ssids.count) сет."
         }
-        return "\(capture.ssids.joined(separator: ", ")) · \(capture.ssids.count) сет."
     }
 }

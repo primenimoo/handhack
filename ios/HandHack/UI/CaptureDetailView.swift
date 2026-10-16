@@ -289,7 +289,7 @@ private struct SmartAttackControl: View {
             HStack {
                 Text("Попыток: \(progress.attempts.formatted())")
                 Spacer()
-                Text("\(Int(progress.peekRate).formatted()) /с")
+                Text("\(Int(progress.currentRate).formatted()) /с · ∅ \(Int(progress.averageRate).formatted()) /с")
             }
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -489,7 +489,7 @@ private struct DictionaryPicker: View {
                                 } label: {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(dictionary.name).font(.subheadline)
-                                        Text("\(dictionary.size.formatted()) строк")
+                                        Text(dictionary.summary)
                                             .font(.caption2).foregroundStyle(.secondary)
                                     }
                                 }

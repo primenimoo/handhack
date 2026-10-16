@@ -21,9 +21,7 @@ struct DictionaryEditorView: View {
                 .padding(.horizontal, 8)
             Divider()
             HStack {
-                Text("\(lineCount.formatted()) строк")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text(status).font(.caption).foregroundStyle(.secondary)
                 Spacer()
                 Button("Сохранить") { save() }
                     .buttonStyle(.borderedProminent)
@@ -46,17 +44,24 @@ struct DictionaryEditorView: View {
         }
     }
 
-    private var lineCount: Int {
-        if text.isEmpty { return 0 }
-        let newlines = text.reduce(0) { $0 + ($1 == "\n" ? 1 : 0) }
-        return newlines + (text.hasSuffix("\n") ? 0 : 1)
+    private var analysis: DictionaryText.Analysis {
+        DictionaryText.analyze(Array(text.utf8))
+    }
+
+    private var status: String {
+        let stats = analysis
+        var parts = ["\(stats.entryLines.formatted()) записей"]
+        if stats.uniqueEntries != stats.entryLines {
+            parts.append("\(stats.uniqueEntries.formatted()) уникальных")
+        }
+        return parts.joined(separator: " · ")
     }
 
     private func save() {
         do {
             try DictionaryStore.overwrite(id: id, text: text)
             onSave()
-            message = "Сохранено: \(lineCount.formatted()) строк."
+            message = "Сохранено: \(status)."
         } catch {
             message = "Не удалось сохранить: \(error.localizedDescription)"
         }
